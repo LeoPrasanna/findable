@@ -208,6 +208,18 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
         if not reel:
             return
 
+        # Already summarized → stop. This chain is re-run by
+        # recover_pending_summaries on every startup, and Render's free tier kills
+        # in-flight background tasks on each spin-down, so a save that already
+        # succeeded can be extracted a second time. If that second extraction comes
+        # back empty (blocked IP, deleted post), the fill below would overwrite a
+        # good summary's status with 'skipped' — leaving real, already-paid-for
+        # summary text invisible in the app. Re-extracting also can't help here:
+        # the summary exists, so there is nothing left to gain.
+        if reel.summary:
+            logger.info(f"[EXTRACT-BG] {reel_id} already has a summary — skipping re-extraction")
+            return
+
         try:
             future = _executor.submit(extractor.extract_info, reel.url)
             info = future.result(timeout=EXTRACT_TIMEOUT)
@@ -220,7 +232,12 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             db.commit()
             return
 
-        if info.get("extracted"):
+        # Only cache an extraction that actually carries content. `extracted` is
+        # True as soon as a title or thumbnail comes back, so caching on that alone
+        # stored text-less results — permanently poisoning the URL for the cache's
+        # 14-day TTL. An extraction with nothing to summarize is precisely the one
+        # worth retrying later, so it must not be cached.
+        if info.get("extracted") and _is_cacheable(info):
             _store_extraction(db, reel.url, info)
 
         filled = _reel_from_info(reel.user_id, reel.url, info)
@@ -478,6 +495,20 @@ def _prune_cache_if_due(db: Session) -> None:
         logger.warning(f"[CACHE] prune failed: {e}")
 
 
+# Minimum text for an extraction to be worth caching. Same bar the summarizer
+# uses — below it there is nothing to summarize, so the result is a failure to be
+# retried, not a success to be remembered.
+MIN_CACHEABLE_TEXT = 50
+
+
+def _is_cacheable(info: dict) -> bool:
+    """Is this extraction worth remembering? Text-less results must not be cached:
+    they're what a bot-blocked IP returns, and caching them makes the failure
+    permanent for the whole TTL. `needs_audio` is kept because that path is a real
+    (if unfinished) extraction the audio fallback can still complete."""
+    return len((info.get("best_text") or "").strip()) >= MIN_CACHEABLE_TEXT or bool(info.get("needs_audio"))
+
+
 def _get_cached_extraction(db: Session, url: str) -> dict | None:
     """Return a fresh cached extraction as an info dict, or None. Fails open."""
     try:
@@ -486,6 +517,15 @@ def _get_cached_extraction(db: Session, url: str) -> dict | None:
             return None
         if row.created_at and (datetime.utcnow() - row.created_at) > timedelta(days=CACHE_TTL_DAYS):
             return None  # stale — let it re-extract
+        # A cached row with no usable text is a MISS, not a hit. Extractions that
+        # returned only a title/thumbnail (what a bot-blocked datacenter IP gives
+        # back) were previously cached as successes, and every later save of that
+        # URL reused the empty result for the full 14-day TTL — so retrying could
+        # never recover, no matter how many times the user tried. Treating it as a
+        # miss re-extracts and heals rows already poisoned.
+        if len((row.best_text or "").strip()) < MIN_CACHEABLE_TEXT and not row.needs_audio:
+            logger.info(f"[CACHE] ignoring text-less cache row for {url} — re-extracting")
+            return None
         return {
             "title": row.title or "",
             "caption": row.caption or "",
@@ -615,6 +655,25 @@ def recover_pending_summaries() -> None:
     can't trigger a cost spike; anything beyond the cap is left for manual retry."""
     db = SessionLocal()
     try:
+        # Self-heal rows whose status contradicts their content. A reel that HAS
+        # summary text is 'ready' by definition — any other status hides it in the
+        # app even though the AI already ran (and was already paid for). These
+        # arose when a re-extraction overwrote the status of an already-summarized
+        # save; the guard in _extract_and_summarize stops new ones appearing.
+        healed = (
+            db.query(ReelDB)
+            .filter(ReelDB.summary_status != "ready", ReelDB.summary.isnot(None))
+            .all()
+        )
+        fixed = 0
+        for r in healed:
+            if r.summary:                       # non-empty JSON list
+                r.summary_status = "ready"
+                fixed += 1
+        if fixed:
+            db.commit()
+            logger.info(f"[RECOVER] healed {fixed} reel(s) that had a summary but a non-ready status")
+
         rows = (
             db.query(ReelDB.id, ReelDB.raw_text, ReelDB.title)
             .filter(ReelDB.summary_status == "pending")
