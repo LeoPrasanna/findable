@@ -134,7 +134,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 ### 1. Clone & configure
 
 ```bash
-git clone https://github.com/LeoPrasanna/savehere.git
+git clone https://github.com/LeoPrasanna/findable.git
 cd savehere
 cp .env.example .env          # then edit .env and add your ANTHROPIC_API_KEY
 ```

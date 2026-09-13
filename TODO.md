@@ -263,7 +263,7 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
   Terms from Menu → Support.
   - [ ] 🔴 👤 **Paste all three into App Store Connect** (Privacy Policy URL, Support URL,
     EULA) — they are submission fields, and App Review taps them.
-  - [ ] 🔴 👤 **Confirm `savehere.support@gmail.com` is a mailbox you actually read.**
+  - [ ] 🔴 👤 **Confirm `findable.support.app@gmail.com` is a mailbox you actually read.**
     It is now printed on a public page and inside the app. A support address that
     bounces is a Guideline 1.5 rejection.
   - [ ] 👤 Re-read `site/privacy.html` §8 after RLS lands on prod — it currently claims
@@ -344,6 +344,16 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
 ---
 
 ## Infrastructure — open
+
+- [ ] **Two stale `savehere` URLs left on purpose, in `mobile/modules/share-config/ios/
+  ShareConfigModule.podspec`** (`s.homepage`, `s.source`). ⚠️ **DO NOT "tidy" THEM
+  SEPARATELY — EDITING THAT FILE MOVES THE iOS FINGERPRINT.** Measured 2026-09-13:
+  changing those two strings took the runtime version from `a86bf3fd…` to `496e1f01…`,
+  which would have orphaned every OTA from TestFlight build 1.0.11. The podspec is a
+  local Expo module, so `@expo/fingerprint` hashes it like any other native source. Both
+  fields are cosmetic and GitHub redirects the old repo URL anyway. **Fix them in the
+  same commit as the next native build**, never on their own. Same trap as the
+  `package.json` scripts rule in `mobile/AGENTS.md`, one directory over.
 
 - [ ] 👤 **Region + Cloudflare.** Pick the Render region nearest first users (Singapore
   for India-first) — **effectively unchangeable later**. Once the domain exists, put

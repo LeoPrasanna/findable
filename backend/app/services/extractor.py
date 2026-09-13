@@ -427,7 +427,7 @@ def _youtube_oembed(url: str) -> dict:
 # savehere.app, a domain nobody here owns — an honest-UA block that cites a
 # domain you do not own is exactly the thing it exists to avoid. Point it at
 # the real product site once that domain exists.
-_HONEST_UA = {"User-Agent": "Findable/1.0 (+https://github.com/LeoPrasanna/savehere)"}
+_HONEST_UA = {"User-Agent": "Findable/1.0 (+https://github.com/LeoPrasanna/findable)"}
 
 _IG_SHORTCODE = re.compile(r"instagram\.com/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)", re.I)
 # ⚠️ THE THUMBNAIL COMES FROM THE <img> TAG, NOT FROM THE EMBEDDED JSON.
