@@ -13,7 +13,7 @@ import { colors, spacing, font, tracking, typeface, themed } from '../constants/
 
 /** The one place this address is written down. App Store Connect's "Support
  *  URL" field needs the same one — see docs/SUPPORT.html. */
-export const SUPPORT_EMAIL = 'savehere.support@gmail.com';
+export const SUPPORT_EMAIL = 'findable.support.app@gmail.com';
 
 /**
  * Things every support reply otherwise has to ask for, and that the user has no

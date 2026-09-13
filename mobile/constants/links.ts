@@ -6,9 +6,12 @@
 // .github/workflows/pages.yml. Swap the base below for a custom domain later;
 // nothing else changes.
 //
-// ⚠️ The path is `/savehere` because that is the REPO name, and GitHub Pages
-// derives the URL from the repo, not from the product. Renaming the repo would
-// break every URL already pasted into App Store Connect, so it stays.
+// ⚠️ The path is `/findable` because that is the REPO name — GitHub Pages derives
+// the URL from the repo, not from the product. The repo was renamed from
+// `savehere` on 2026-09-13 and the OLD PAGES URL DIES WITH THE RENAME (GitHub
+// redirects repo and clone URLs; it does not redirect a project Pages path).
+// Nothing had been pasted into App Store Connect yet, which is the only reason
+// this was free. It will not be free a second time.
 //
 // ⚠️ SUPPORT_EMAIL is NOT here — it lives in `app/support.tsx`, which is the one
 // place it is written down. Two copies of a support address is how you end up
@@ -19,7 +22,7 @@
 // come from us; pointing App Review at apple.com/support is a Guideline 1.5
 // rejection.
 
-const SITE = 'https://leoprasanna.github.io/savehere';
+const SITE = 'https://leoprasanna.github.io/findable';
 
 export const SUPPORT_URL = `${SITE}/`;
 export const PRIVACY_URL = `${SITE}/privacy.html`;

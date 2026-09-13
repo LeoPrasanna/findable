@@ -23,7 +23,7 @@ Free tier = a stable public URL at $0 (with cold starts).
 
 1. **Merge to `develop`** — the blueprint reads `render.yaml` from that branch.
 2. **render.com → New + → Blueprint → New Blueprint Instance** → repo
-   `LeoPrasanna/savehere` → branch **`develop`**.
+   `LeoPrasanna/findable` → branch **`develop`**.
    ⚠️ Do **not** use New → *Web Service* / *Static Site*: the Blueprint is what applies
    `render.yaml` (rootDir `backend`, build + start commands, health check, env-var slots).
    A hand-made service means configuring all of that by hand.
