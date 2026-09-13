@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator, TextInputProps, Animated,
-  Easing, AccessibilityInfo,
+  Easing, AccessibilityInfo, Linking,
 } from 'react-native';
 import type { ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
+import { PRIVACY_URL, TERMS_URL } from '../constants/links';
 import { supabase } from '../services/supabase';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { signInWithProvider, signInWithApple, OAuthProvider } from '../services/oauth';
@@ -473,9 +474,29 @@ export function LoginScreen() {
             </View>
           ) : null}
 
+          {/* ⚠️ THESE TWO WERE UNDERLINED TEXT WITH NO HANDLER — a link in every
+              respect except the one that matters (owner, 2026-09-14). Underlining
+              something and then not making it tappable is worse than plain text:
+              it tells the user the agreement they are about to accept is readable,
+              and then refuses to show it.
+
+              `onPress` on a nested <Text> rather than wrapping in a Pressable,
+              because a Pressable cannot sit inside a paragraph without breaking
+              the line wrap. Failures are swallowed: the same two pages are one tap
+              away in Menu → Support, and an alert thrown over the login screen is
+              a worse outcome than a tap that does nothing. */}
           <Text style={styles.legal}>
-            By continuing you agree to our <Text style={styles.legalStrong}>Terms</Text> and{' '}
-            <Text style={styles.legalStrong}>Privacy Policy</Text>. Findable stores links and
+            By continuing you agree to our{' '}
+            <Text
+              style={styles.legalStrong}
+              accessibilityRole="link"
+              onPress={() => { Linking.openURL(TERMS_URL).catch(() => {}); }}
+            >Terms</Text> and{' '}
+            <Text
+              style={styles.legalStrong}
+              accessibilityRole="link"
+              onPress={() => { Linking.openURL(PRIVACY_URL).catch(() => {}); }}
+            >Privacy Policy</Text>. Findable stores links and
             AI-generated summaries for personal reference; saved content belongs to its original
             creators, and AI summaries may be imperfect.
           </Text>
