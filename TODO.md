@@ -53,14 +53,32 @@ because a pause is reversible. A deletion would not have been.
 - [x] 🔴 👤 **Apple Developer account — $99/year.** Enrolled as **Individual**, Team ID
   `G28LWZ4B23`, renews 2027-09-02; **Small Business Program accepted** (15%, not 30%).
   Unblocked real-device testing, TestFlight and Sign in with Apple.
-- [ ] 🔴 👤 **Production email SMTP.** Supabase's built-in sender caps at ~2–4/hour
-  ("email rate limit exceeded"), unusable for real signups. Wire custom SMTP under
-  Authentication → Emails before re-enabling "Confirm email". Free tiers: **Brevo**
-  (300/day), **Resend** (3k/mo, best DX), **SendGrid** (100/day). ⚠️ Real prerequisite
-  is a **verified sending domain** (SPF + DKIM) — buy the domain first. Dev: keep
-  "Confirm email" OFF.
+- [ ] 👤 **Production email SMTP — NO LONGER A BLOCKER** (owner, 2026-09-13: sign-in is
+  **Google and Apple only**, no email signup). Nothing transactional is sent, so
+  Supabase's ~2–4/hour built-in sender is enough for the handful of legacy test accounts.
+  Wire real SMTP only if email auth ever comes back. Free tiers when that day comes:
+  **Resend** (3k/mo, best DX), **Brevo** (300/day), **SendGrid** (100/day); the real
+  prerequisite is a **verified sending domain** (SPF + DKIM), so buy the domain first.
+  - [ ] 🔴 **Remove the email/password path from `mobile/components/LoginScreen.tsx`**
+    before public launch. It still renders a full signup form with a password-strength
+    meter, which contradicts the decision above and the published Privacy Policy (which
+    describes it as "legacy … being retired"). ⚠️ **Do not delete it before the 3 dev
+    test accounts are migrated** — they sign in with email and password today, and
+    ripping the form out locks you out of your own staging data. Delete the legacy
+    sentence in `site/privacy.html` §2 in the same commit.
+  - ⚠️ **The cost of Google/Apple-only, stated once so it is a decision and not a
+    surprise:** on Android there is exactly ONE door. Apple sign-in is iOS-only (it needs
+    the native `expo-apple-authentication` flow), so if Google OAuth breaks — consent
+    screen misconfigured, client secret rotated, project suspended — every Android user
+    is locked out with no fallback and no password reset to fall back on. Watch item, not
+    a task; the mitigation if it ever bites is a magic-link, which needs the SMTP above.
 - [ ] 🔴 👤 **Apply `backend/scripts/enable_rls.sql` to the PROD Supabase project**
-  (ref `lukmwwcilrjqqtgqbynq`) before the first prod deploy. Needs prod credentials.
+  (ref `lukmwwcilrjqqtgqbynq`) **on the day you point the app at prod** (owner,
+  2026-09-13: everything is on dev today, so this waits for the move). Needs prod
+  credentials. ⚠️ **Tie it to the move, not to "later"** — the failure mode is pointing
+  the app at prod on a Friday and leaving every table world-readable to the publishable
+  key that ships inside the app bundle. It belongs in the same checklist item as
+  switching `EXPO_PUBLIC_API_URL`, not in a separate one you can forget.
   `savehere-dev` was verified closed 2026-08-10 — every table `relrowsecurity` and
   `relforcerowsecurity` true with zero policies, proven from outside with the
   publishable key that ships in the app bundle. Prod has **not** had this applied.
@@ -144,8 +162,9 @@ because a pause is reversible. A deletion would not have been.
   catching it.** The harness created the fake Swift under the *template's* name, so it
   "passed" against the same wrong assumption the plugin held. Fixture names must come
   from the library's own constants, never retyped.
-- [ ] 👤 **Verify on device:** share from Instagram, YouTube **and LinkedIn**; you should
-  stay in the source app and the save should appear in the library within seconds.
+- [x] 👤 **Verified on device 2026-09-13** (owner): shared from Instagram, YouTube **and
+  LinkedIn** with Silent share on — stayed in the source app, the app never opened, the
+  save landed. The iOS half of the invisible share is done.
 
 ## 🔴 Monetization — required before launch
 
@@ -161,20 +180,23 @@ because a pause is reversible. A deletion would not have been.
   when it became 50/500. Keep them that way.
   The upsell is **tier-aware** in both places (server 403 and client alert):
   free is offered Pro, trial and pro are not, because they already hold 500.
-- [ ] 🔴 👤 **Remove the `FREE_SAVE_LIMIT=500` override in `render.yaml` when
-  billing ships.** The real free cap is 50 and `config.py` says so; staging
-  overrides it to 500 because **nothing charges yet** — `app/pro.tsx` renders a
-  paywall with no purchase flow behind it, so a free user hitting 50 today gets
-  a 403 offering a product they cannot buy. Deleting the override restores 50
-  with no code change. The prod block (still commented out) deliberately does
-  NOT carry it: prod going live implies a working checkout, which is the same
-  condition that makes 50 correct.
+- [x] **The `FREE_SAVE_LIMIT=500` override is GONE** (owner, 2026-09-13). Staging now
+  runs the real numbers: **free 50, pro 500**, both stated explicitly in `render.yaml`
+  rather than inherited from `config.py`. ⚠️ **A free account that reaches 50 now gets a
+  403 offering a product that cannot be bought** — `app/pro.tsx` renders a paywall with
+  no purchase flow behind it. That is the accepted trade: testing the real wall beats
+  hiding it. It stops being acceptable the moment a real user is behind it, which makes
+  RevenueCat below the true gate on public launch.
 
 
 
 
-- [~] 🔴 👤 **RevenueCat.** Manages IAP entitlements, per-territory pricing and promo
-  experiments across iOS/Android. **No quota code change needed** — `daily_limit_for()`
+- [~] 🔴 👤 **RevenueCat — deliberately AFTER testing, on the move to production**
+  (owner, 2026-09-13). ⚠️ Until it exists, free accounts hit a hard 50-save wall with no
+  way to buy past it (see the save-caps item above). That is fine for TestFlight and not
+  fine for a public listing, so this is the real gate on launch — not a follow-up.
+  Manages IAP entitlements, per-territory pricing and promo experiments across
+  iOS/Android. **No quota code change needed** — `daily_limit_for()`
   already reads `app_metadata.tier`.
   **The webhook is written but is a SKETCH and is NOT wired** — `app/routes/billing.py`
   exists and is deliberately not registered, because it mints revenue entitlements. Four
@@ -233,8 +255,19 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
 - [ ] 👤 **Description** — keyword-optimised, under 4000 characters.
 - [ ] 👤 **Keywords** — the 100-character search field.
 - [ ] 👤 **Age rating** — questionnaire in App Store Connect (likely 4+).
-- [ ] 🔴 👤 **Privacy policy URL** — required for any app with network access. Host a
-  one-page policy and add the URL.
+- [x] **Privacy policy, Terms of Use (EULA) and Support pages** — written 2026-07-29,
+  rewritten for Findable and published 2026-09-13. They live in `site/` and deploy to
+  GitHub Pages on every merge to `develop` (`.github/workflows/pages.yml`), so they are
+  versioned with the app instead of pasted into a dashboard nobody has the login for.
+  URLs are the single source in `mobile/constants/links.ts`; the app links Privacy and
+  Terms from Menu → Support.
+  - [ ] 🔴 👤 **Paste all three into App Store Connect** (Privacy Policy URL, Support URL,
+    EULA) — they are submission fields, and App Review taps them.
+  - [ ] 🔴 👤 **Confirm `savehere.support@gmail.com` is a mailbox you actually read.**
+    It is now printed on a public page and inside the app. A support address that
+    bounces is a Guideline 1.5 rejection.
+  - [ ] 👤 Re-read `site/privacy.html` §8 after RLS lands on prod — it currently claims
+    per-request scoping only, which is what is true today. Strengthen it then, not now.
 - [~] **EAS iOS profiles** — a `testflight` profile exists (store distribution, staging
   env). ⚠️ The `production` profile points at `savehere-api-prod.onrender.com`, which
   **does not exist** (commented out in `render.yaml`) — do not build TestFlight from it
@@ -242,8 +275,8 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
   first iOS build.
 - [ ] 👤 **TestFlight beta** before submitting for review. App record created 2026-09-09,
   App Store Connect Apple ID **6810128841** (already in `eas.json` → `submit`).
-- [~] **Support URL** — in-app page done 2026-08-14 (`mobile/app/support.tsx`); the
-  public URL is still needed for App Store Connect.
+- [x] **Support URL** — in-app page done 2026-08-14 (`mobile/app/support.tsx`), public
+  page live at `site/index.html` from 2026-09-13. Both point at the same address.
 
 ---
 

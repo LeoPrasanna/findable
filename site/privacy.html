@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Findable</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="brand" href="./">Find<span>able</span></a>
+  <nav>
+    <a href="./">Support</a>
+    <a href="privacy.html" aria-current="page">Privacy Policy</a>
+    <a href="terms.html">Terms of Use</a>
+  </nav>
+</header>
+
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: 13 September 2026</p>
+  <p class="lede">
+    Findable saves links you send it, reads what is publicly available at that link,
+    and writes a short summary. This page describes exactly what we store to do that,
+    who else touches it, and how to get rid of it.
+  </p>
+
+  <div class="card">
+    <strong>The short version.</strong>
+    <ul>
+      <li>No advertising, no analytics SDKs, no tracking across apps or websites.</li>
+      <li>We do not sell your data or share it for advertising.</li>
+      <li>You can delete your account and all of its data from inside the app, at any time.</li>
+    </ul>
+  </div>
+
+  <h2>1. Who we are</h2>
+  <p>
+    Findable ("we", "us") is the operator of the Findable mobile app. For any privacy
+    question or request, email
+    <a href="mailto:savehere.support@gmail.com">savehere.support@gmail.com</a>.
+  </p>
+
+  <h2>2. What we collect</h2>
+
+  <h3>Account information</h3>
+  <p>
+    You sign in with <strong>Google or Apple</strong>. We never see a password and we
+    never ask you to create one. From the provider we receive only your email address
+    and, where you allow it, your name — the minimum needed to make the account yours.
+    If you use Apple's <em>Hide My Email</em>, we only ever hold the relay address and
+    the app works exactly the same.
+  </p>
+  <p>
+    A legacy email-and-password sign-in exists for early test accounts and is being
+    retired. Where it is used, the password is handled by our authentication provider and
+    stored only as a salted hash &mdash; we never see it.
+  </p>
+  <p>
+    Optionally, a first name, last name, nickname and a chosen emoji avatar. These are
+    used only to address you in the app. Leave them blank and the app still works.
+  </p>
+
+  <h3>Content you save</h3>
+  <p>When you save a link, we store:</p>
+  <ul>
+    <li>the link itself and which platform it came from;</li>
+    <li>public information published at that link — title, thumbnail image URL,
+        the creator's public username, duration, and the post's caption or
+        auto-generated captions/transcript;</li>
+    <li>the AI-generated summary, tags and category we derive from it;</li>
+    <li>anything you add yourself — personal notes, and any action steps, recipes,
+        workouts or trip itineraries you ask the app to generate.</li>
+  </ul>
+  <p>
+    When you share a link to Findable from another app, the link is sent to our server in
+    the background and saved without Findable having to open. That is the whole feature;
+    it sends the link and your account's save credential, and nothing else from your
+    phone. You can switch it off under <em>Silent share</em> in the app, and shares will
+    open Findable instead.
+  </p>
+  <p>
+    We do not download or store the video or audio itself. We read publicly available
+    text. We have no access to your private accounts on Instagram, YouTube, TikTok or
+    anywhere else, and we never ask you to log in to them.
+  </p>
+
+  <h3>Usage information</h3>
+  <p>
+    A per-day count of how many AI actions you have used, so we can enforce the daily
+    limit on your plan. Alongside it we keep a short, human-readable list of what those
+    actions were (for example a saved item's title, or a truncated version of a question
+    you asked your library) so the app can show you where your daily allowance went.
+    <strong>That list is deleted automatically after 2 days.</strong>
+  </p>
+
+  <h3>Crash and error reports</h3>
+  <p>
+    When the app or our server hits an error, a report goes to Sentry so we can fix it:
+    app version, device model, OS version and a stack trace. Personal-data attachment is
+    switched off, so a report carries no profile fields and no saved content. It is
+    diagnostics, not analytics — nothing in it follows you anywhere.
+  </p>
+
+  <h3>What we do not collect</h3>
+  <p>
+    No advertising identifiers. No location. No contacts, photos or health data. No
+    analytics or attribution SDKs — we do not measure your behaviour in the app, and we
+    do not track you across other companies' apps or websites, so we do not need to ask
+    for App Tracking Transparency permission.
+  </p>
+
+  <h2>3. Why we are allowed to process it</h2>
+  <p>
+    If you are in the UK, EEA or another region with similar law, our legal bases are:
+    <strong>performance of a contract</strong> (running the account and the save/summarise
+    features you asked for), <strong>legitimate interests</strong> (keeping the service
+    secure, enforcing usage limits, and preventing abuse of free trials), and
+    <strong>consent</strong> where you volunteer optional profile details.
+  </p>
+
+  <h2>4. Who else processes your data</h2>
+  <p>
+    We use a small number of service providers. They process data on our instructions
+    only. We do not sell data to anyone, and we have no advertising partners.
+  </p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Provider</th><th>What it does</th><th>What it sees</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Supabase</td>
+        <td>Accounts, sign-in, and the database</td>
+        <td>Your email, optional profile fields, and everything you save</td>
+      </tr>
+      <tr>
+        <td>Render</td>
+        <td>Hosts the Findable server</td>
+        <td>Data in transit through the app's API, plus operational server logs</td>
+      </tr>
+      <tr>
+        <td>Anthropic</td>
+        <td>The Claude model that writes summaries, recipes, workouts and answers</td>
+        <td>The text of the content being summarised and, for library questions, your
+            question and the summaries it is answered from. Anthropic does not use
+            this content to train its models.</td>
+      </tr>
+      <tr>
+        <td>Google / Apple</td>
+        <td>Sign-in</td>
+        <td>That you signed in to Findable. They give us your email address and name; we
+            give them nothing about what you save.</td>
+      </tr>
+      <tr>
+        <td>Sentry</td>
+        <td>Crash and error reporting</td>
+        <td>Technical crash details — app version, device model, OS version, stack trace.
+            No saved content, no profile fields.</td>
+      </tr>
+      <tr>
+        <td>Apple / Google Play</td>
+        <td>App distribution and subscription payments</td>
+        <td>Payment and subscription details. We never see your card details.</td>
+      </tr>
+      <tr>
+        <td>RevenueCat</td>
+        <td>Tells our server whether your subscription is active</td>
+        <td>Your account identifier and subscription status</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    When you save a link, our server also makes an ordinary public request to the source
+    platform (for example YouTube or Instagram) to read that page — the same request any
+    browser would make. Your identity is not sent with it.
+  </p>
+  <p>
+    We may also disclose data where we are legally required to, or where it is necessary
+    to investigate abuse or protect the safety of users.
+  </p>
+
+  <h2>5. Where data is stored</h2>
+  <p>
+    Our database and servers are hosted in the United States, and our providers may
+    process data in other countries. Where personal data is transferred out of the UK or
+    EEA, our providers rely on Standard Contractual Clauses or an equivalent approved
+    transfer mechanism.
+  </p>
+
+  <h2>6. How long we keep it</h2>
+  <ul>
+    <li><strong>Saved items, notes and generated content</strong> — until you delete them,
+        or until you delete your account.</li>
+    <li><strong>Account and profile</strong> — until you delete your account.</li>
+    <li><strong>AI action history</strong> — 2 days.</li>
+    <li><strong>Daily usage counters</strong> — retained after account deletion. They hold
+        only a user identifier, a date and a number, and deleting them would let the daily
+        limit be reset by repeatedly wiping data.</li>
+    <li><strong>Free-trial record</strong> — we keep a one-way cryptographic hash of your
+        email address so that the same person cannot claim an unlimited number of free
+        trials. It cannot be reversed into your email address, and it is not used for any
+        other purpose. It is retained after account deletion, because that is the only
+        thing that makes it work.</li>
+    <li><strong>Extraction cache</strong> — the public text we read from a link is cached
+        against that link so the same link never has to be fetched twice. It is keyed by
+        the URL and contains no information about who saved it. It is not deleted with
+        your account, because it is not linked to you.</li>
+  </ul>
+
+  <h2>7. Your rights and how to use them</h2>
+  <p>
+    <strong>Deletion.</strong> Open the profile panel in the app and choose
+    <em>Delete account</em>. This immediately and permanently removes your saved items,
+    notes, generated tasks, workouts and itineraries, your profile, your AI action
+    history, and your sign-in record. It cannot be undone. The two exceptions are
+    listed in section 6.
+  </p>
+  <p>
+    <strong>Access, correction, portability, objection and restriction.</strong> Depending
+    on where you live you may have these rights under the GDPR, UK GDPR, the CCPA/CPRA or
+    India's Digital Personal Data Protection Act. Email
+    <a href="mailto:savehere.support@gmail.com">savehere.support@gmail.com</a> and we will
+    respond within 30 days. We will not discriminate against you for exercising a right.
+  </p>
+  <p>
+    If you are in the UK or EEA and are unhappy with our response, you may complain to
+    your local data protection authority.
+  </p>
+
+  <h2>8. Security</h2>
+  <p>
+    All traffic between the app and our servers uses HTTPS. Every request is checked
+    against the signed token from your sign-in provider and scoped to your account, so one
+    account cannot read another's data. No system is perfectly secure, but we do not store
+    payment details and we never hold a password of yours at all.
+  </p>
+
+  <h2>9. Children</h2>
+  <p>
+    Findable is not directed at children. You must be at least 13 years old to use it
+    (16 in the EEA and the UK where required by local law). We do not knowingly collect
+    data from children below that age. If you believe a child has created an account,
+    email us and we will delete it.
+  </p>
+
+  <h2>10. Changes to this policy</h2>
+  <p>
+    If we change this policy we will update the date at the top of this page. If a change
+    materially affects how we handle your data, we will tell you in the app before it
+    takes effect.
+  </p>
+
+  <h2>11. Contact</h2>
+  <p>
+    <a href="mailto:savehere.support@gmail.com">savehere.support@gmail.com</a>
+  </p>
+</main>
+
+<footer>
+  Findable · <a href="./">Support</a> · <a href="terms.html">Terms of Use</a>
+</footer>
+
+</body>
+</html>

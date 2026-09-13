@@ -50,18 +50,17 @@ services:
         value: "20"
       # ── Save caps — total saves per tier (backend/app/config.py).
       #
-      # ⚠️ FREE IS TEMPORARILY 500, NOT THE 50 THE CODE DEFAULTS TO (owner,
-      # 2026-09-11, "option 1"). The real free cap is 50 and that is what
-      # config.py says. It is overridden here because NOTHING CHARGES YET:
-      # app/pro.tsx renders a paywall and the RevenueCat flow does not exist,
-      # so a free user hitting 50 today would be handed a 403 offering them a
-      # product they cannot buy. 500 keeps the limit machinery live and tested
-      # without putting up a wall with no door in it.
+      # The 500 free override is GONE (owner, 2026-09-13): free is the real 50.
+      # Both keys are now stated explicitly rather than leaning on the code
+      # default, because a cap that silently changes with a code edit is the
+      # wrong kind of surprise for the one number that can refuse a save.
       #
-      # 👤 DELETE THIS OVERRIDE THE DAY BILLING SHIPS — the cap reverts to
-      # config.py's 50 on its own. Tracked in TODO.md → Monetization.
+      # ⚠️ NOTHING CHARGES YET. app/pro.tsx renders a paywall and RevenueCat
+      # does not exist, so a free user who hits 50 gets a 403 offering a product
+      # they cannot buy. That is the owner's accepted trade — testing the real
+      # wall matters more than hiding it. Ship billing before real users arrive.
       - key: FREE_SAVE_LIMIT         # code default: 50
-        value: "500"
+        value: "50"
       - key: PRO_SAVE_LIMIT          # trial + pro
         value: "500"
       # ── Secrets — set in THIS service's dashboard (savehere-dev project) ──────
