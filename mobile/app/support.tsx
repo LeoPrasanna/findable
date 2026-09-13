@@ -8,6 +8,7 @@ import { Label, Body, Title, Rule, GhostButton, Index } from '../components/kit'
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { useAuth } from '../contexts/AuthContext';
 import { getCachedUsage } from '../services/usageCache';
+import { PRIVACY_URL, TERMS_URL } from '../constants/links';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 /** The one place this address is written down. App Store Connect's "Support
@@ -226,6 +227,37 @@ export default function SupportScreen() {
           your account and everything in it at any time from Menu → Delete account, without asking
           anyone.
         </Body>
+
+        {/* ── Legal ─────────────────────────────────────────────────────────
+            ⚠️ THESE TWO ROWS ARE A SUBMISSION REQUIREMENT, not a formality.
+            App Review taps the Privacy Policy link, and a subscription app must
+            show its EULA where the user can reach it. The pages live in `site/`
+            and publish to GitHub Pages, so they are versioned with the app
+            rather than pasted into a hosting dashboard nobody has the login for.
+
+            `Linking.openURL` direct, for the reason given on `mail` above — the
+            `canOpenURL` precheck in services/openLink refuses https on Android
+            without a <queries> block. A failure here is silent on purpose: the
+            same pages are reachable from the support email, and an alert about
+            a legal page is worse than a tap that does nothing. */}
+        <Label wide style={styles.section}>Legal</Label>
+        <Rule />
+        {[
+          { label: 'Privacy Policy', url: PRIVACY_URL },
+          { label: 'Terms of Use', url: TERMS_URL },
+        ].map(l => (
+          <View key={l.label}>
+            <Pressable
+              style={styles.faq}
+              onPress={() => { Linking.openURL(l.url).catch(() => {}); }}
+              accessibilityLabel={`Open ${l.label} in your browser`}
+            >
+              <Body tone="primary" style={styles.faqQ}>{l.label}</Body>
+              <Icon name="open-outline" size={14} color={colors.textTertiary} />
+            </Pressable>
+            <Rule />
+          </View>
+        ))}
       </ScrollView>
     </View>
   );

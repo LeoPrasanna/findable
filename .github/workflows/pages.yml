@@ -1,0 +1,42 @@
+# Publishes site/ (support, privacy policy, terms/EULA) to GitHub Pages.
+#
+# These three URLs are App Store submission blockers — App Review taps them — so
+# they live in the repo and deploy on merge rather than being pasted into some
+# hosting dashboard nobody remembers the login for.
+#
+# ONE-TIME SETUP: repo Settings → Pages → Source = "GitHub Actions". Without that
+# this workflow fails at the deploy step with a 404.
+name: Publish site
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue instead of cancelling, so the last push wins.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
