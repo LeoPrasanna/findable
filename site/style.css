@@ -33,7 +33,9 @@ header {
 }
 
 .brand {
-  display: inline-flex; align-items: center; gap: 10px;
+  /* gap: 0 — the wordmark is one word. It was 10px when the brand was
+     "SaveHere" and the split fell on a capital; "Find able" just reads broken. */
+  display: inline-flex; align-items: center; gap: 0;
   font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
   color: var(--text); text-decoration: none;
 }
