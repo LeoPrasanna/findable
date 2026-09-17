@@ -562,6 +562,28 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
 - ⚠️ **`EXPO_PUBLIC_SENTRY_DSN` is inlined at BUILD time.** A build made without it can
   never gain crash reporting later — no OTA update can add it. It is set in EAS for
   development/preview/production; if a build ever ships without reporting, that is why.
+- ⚠️ **…AND AN OTA CAN SILENTLY TURN IT OFF AGAIN. The line above is only half the
+  trap.** The `if (SENTRY_DSN)` guard lives in `mobile/app/_layout.tsx` — **JS**, which
+  is exactly what `eas update` replaces. So a bundle published WITHOUT the DSN inlined
+  strips crash reporting from a build that shipped WITH it. There is no warning: the
+  guard's own comment is "Guarding is better than a lie", so a missing DSN fails
+  **quiet, by design**, and the app looks perfectly healthy while reporting nothing.
+  Same mechanism as the entry above, opposite direction.
+  - Surfaced 2026-09-17 publishing to `preview`: expo-cli reported exporting **three**
+    `EXPO_PUBLIC_*` vars from the local `.env` while the EAS `preview` environment holds
+    **four** — the DSN being the odd one out. Which source wins when `eas update`
+    bundles was never established, and that is the point: **do not rely on precedence.**
+  - **The fix is redundancy, not a rule about ordering.** Keep every `EXPO_PUBLIC_*`
+    var in BOTH the local `.env` and the EAS environment, the way `EXPO_PUBLIC_API_URL`
+    already is. When the two agree, which one wins stops mattering — for the DSN and for
+    anything added later.
+  - **Verify after any OTA**, don't reason about it: open the app on a device on that
+    channel and look for a new session in Sentry. Nothing arriving means the DSN did not
+    make it into the bundle.
+  - ⚠️ The same inlining applies to `EXPO_PUBLIC_API_URL` and is far worse: an OTA
+    bundled against a `.env` pointing at `http://localhost:8000` sends every device on
+    the channel to its own loopback, instantly and with no review gate. Check both
+    sources agree BEFORE publishing; `eas update:rollback --channel <ch>` is the undo.
 - ⚠️ **Sentry does NOT see Share Extension crashes.** The extension is a separate process
   with no JS runtime. If sharing breaks silently, Sentry will be quiet, and that silence
   is not evidence of health — check the device's own crash logs instead.
