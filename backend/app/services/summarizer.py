@@ -15,7 +15,7 @@ MODEL = "claude-haiku-4-5-20251001"
 CATEGORIES = [
     "fitness", "cooking", "tech", "motivation", "education", "entertainment",
     "fashion", "beauty", "travel", "business", "news", "health", "finance",
-    "hobby", "other",
+    "hobby", "shopping", "other",
 ]
 
 # The static rulebook lives in `system`, not in the user turn.
@@ -92,7 +92,8 @@ CATEGORY: pick exactly one from: """ + ", ".join(CATEGORIES) + """
 - beauty = makeup, skincare, haircare, grooming routines.
 - fashion = outfits, clothing, styling (clothes — not makeup).
 - travel = trips, destinations, itineraries, AND outdoor adventures: trekking, hiking, biking, camping.
-- fitness = workouts and exercise technique (a biking/trekking TRIP is travel, not fitness)."""
+- fitness = workouts and exercise technique (a biking/trekking TRIP is travel, not fitness).
+- shopping = WHAT TO BUY and where: hauls, product picks, deals, price comparisons, wishlists. The test is the takeaway, not the subject — a video that shows how to WEAR the clothes is fashion, one that tells you which to buy is shopping; a gadget explained is tech, a gadget recommended is shopping."""
 
 # Enforced server-side, so the model cannot hand back a shape we fail to parse.
 # This replaces hand-stripping ``` fences and, more importantly, the

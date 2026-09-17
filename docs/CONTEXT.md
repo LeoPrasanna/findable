@@ -16,7 +16,7 @@ _Last meaningful update: see git log on `develop`._
 
 ## 1. What SaveHere is
 
-An **iOS-first (then Android) mobile app** that saves short-form content — Instagram Reels, YouTube Shorts, TikTok, LinkedIn posts, Facebook reels — and:
+An **iOS-first (then Android) mobile app** that saves short-form content — Instagram Reels, YouTube Shorts, TikTok, Threads, LinkedIn posts, Facebook reels — and:
 - generates **AI bullet summaries + tags** (Claude Haiku) on save,
 - turns content into **action**: step-by-step recipes / task checklists, and workout plans,
 - lets you **search**, **rediscover** older saves, and **ask your library** questions answered from your own saves.
@@ -343,6 +343,60 @@ listener is ever removed or duplicated.
   `toLocaleTimeString`: Intl options are honoured inconsistently across Hermes
   builds and a meter that reads differently per device is worse than one that is
   plain everywhere.
+
+### Adding a platform is five lists, not one (Threads, 2026-09-17)
+
+`detect_platform()` returning `"unknown"` is a **hard 400 at save time** —
+`routes/reels.py` rejects the URL before anything else runs. So a platform is
+either in that function or it is not supported at all; there is no partial
+state. Threads needed **both** `threads.net` and `threads.com` — Meta moved the
+domain, the app shares `.com`, and every link shared before the move is a live
+`.net` URL. Recognising one host would have rejected half the real links, which
+is the identical bug `lnkd.in` caused for LinkedIn (see the note in
+`detect_platform`).
+
+Nothing else had to be written for it to work: yt-dlp has no Threads extractor,
+so a Threads save falls through to the **public page-meta path** at the bottom
+of `extract_info()` — the same route LinkedIn and Facebook take — and its images
+come from `cdninstagram.com`/`fbcdn.net`, already in `_THUMB_HOSTS`. The other
+four lists are parity, not plumbing: `_PROBE_HOSTS` (`main.py`), the wall/weak
+title sets (`routes/reels.py`), and on mobile `platformMeta`, `platformLabel`
+and `readFailure`'s placeholder regex.
+
+⚠️ **A brand glyph fails SILENTLY.** `platformMeta.icon` goes to Ionicons, and a
+name Ionicons doesn't know renders an **empty box**, not an error. `logo-threads`
+is real in `@expo/vector-icons` 15 — checked against the glyph map, not assumed.
+Check the next one the same way.
+
+### Categories are one list in four places (shopping, 2026-09-17)
+
+`summarizer.CATEGORIES`, `reels.ALLOWED_CATEGORIES`, `theme.CATEGORY_OPTIONS`
+and `theme.categoryMeta` must agree, and the last one also needs a Lucide glyph
+in `Icon.tsx`. The column is a plain `String` — **no migration**, and an
+unrecognised value already degrades to `"other"` on both write paths.
+
+The part that is not bookkeeping is the **prompt**. A new category with no
+disambiguation line just scatters: `shopping` overlaps `fashion`, `beauty` and
+`tech` on subject matter, so the rule added to the prompt tests the TAKEAWAY
+instead — how to wear it is fashion, which to buy is shopping; a gadget
+explained is tech, a gadget recommended is shopping. Search synonyms were kept
+deliberately short for the same reason (`product`, `review` and `store` were all
+rejected as too generic to be precise).
+
+### OTA updates were installed but invisible (2026-09-17)
+
+`expo-updates` had been a dependency since 2026-08-15 and **nothing ever called
+it**. With the default `ON_LOAD` config an update downloads during one launch
+and applies on a later one, silently — so "JS ships without an APK" was true of
+the pipeline and not of the user's experience. `services/appUpdate.ts` now reads
+that state machine and the profile panel shows a button when, and only when,
+there is something to apply. It never applies on its own: an OTA swaps the
+bundle and restarts, and doing that under someone mid-save is a data-loss shape.
+
+Two traps are recorded in that file rather than here because they bite at the
+call site: `Updates.isEnabled` is **hardcoded `true` in the web shim** (so the
+guard is `Platform.OS !== 'web' && isEnabled`), and `reloadAsync()` **never
+resolves on success** — nothing may be scheduled after it.
 
 ## 5. Known gotchas / constraints
 

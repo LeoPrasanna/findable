@@ -29,12 +29,11 @@ import { RollingTagline } from './RollingTagline';
  * them here was pure duplication. The category chips duplicated the Library's
  * own filter; the disclaimer moved to where it is actually read.
  *
- * ── The one idea worth preserving ────────────────────────────────────────────
- * THE INPUT NEVER MOVES, and as of 2026-08-10 it never changes job either:
+ * ── The ladder ───────────────────────────────────────────────────────────────
  *
  *     0 saves        paste a link      "Save it. Then ask it."
  *     1..MIN-1       paste a link      "…and two to go."   + unlock ticks
- *     MIN+           paste a link      "You saved it. Now use it."
+ *     MIN+           NO COMPOSER       "You saved it. Now use it." + live counters
  *
  * ⚠️ The composer used to become an "ASK YOUR LIBRARY" button at MIN+ saves.
  * The owner removed it (2026-08-10): Ask is a tab, and the home screen has one
@@ -43,6 +42,23 @@ import { RollingTagline } from './RollingTagline';
  * (app/ask.tsx enforces it independently), so the unlock ticks still tell the
  * truth about when the Ask tab starts working. Threshold is imported, never
  * hardcoded.
+ *
+ * ⚠️ THE COMPOSER NOW DISAPPEARS AT `ready` (owner, 2026-09-17). This reverses
+ * "the input never moves", which this file argued for at length — so the reason
+ * it is safe is worth stating rather than discovering later:
+ *
+ *   SAVING IS NOT ORPHANED. The tab bar carries a `+ Save` tab on every screen
+ *   it renders on, and `/` is NOT in its HIDE_ON list (components/TabBar.tsx),
+ *   so the route to /save is permanently one tap away and always in the same
+ *   place. The dock composer at MIN+ saves was a SECOND button to the same
+ *   screen, sitting directly above the first.
+ *
+ *   It stays for `empty` and `learning`. A user with four saves has not met the
+ *   tab bar yet — for them the dock IS the instruction, and deleting it would
+ *   leave a first-run screen with a sentence and no way to act on it.
+ *
+ * Net: at `ready` this screen is a dashboard, and its numbers are the controls
+ * (see the metrics block below).
  *
  * ⚠️ NO SERIF. The approved mockup rendered the hero in a serif face; the app is
  * one family (Inter) and the owner asked for strict consistency in the same
@@ -186,7 +202,18 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         </Pressable>
       </View>
 
-      <View style={styles.body}>
+      {/* ⚠️ The bottom inset is the BODY's job now, not the dock's. The dock
+          used to be the only thing standing between centred content and the
+          floating tab bar; with it gone at `ready`, content centred over the
+          full height sits under the bar. Padding the body keeps the centring
+          honest in both cases — at `empty`/`learning` the dock adds its own
+          padding below this, which is what has always happened. */}
+      <View
+        style={[
+          styles.body,
+          stage === 'ready' && { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE },
+        ]}
+      >
         <Text style={styles.hero}>
           {blocked ? 'Can’t reach\nthe server.' : copy.head}
         </Text>
@@ -221,10 +248,29 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
           ⚠️ MINIMAL MEANS NO NEW VOCABULARY. No cards, no icons, no colour,
           no progress rings — numbers in the display face with a Label under
-          each, which is the grammar this screen already speaks. The screen's
-          rule is still one action; these are a receipt, not destinations, so
-          nothing here is tappable. Adding taps would rebuild the eight-link
-          menu this design deleted.
+          each, which is the grammar this screen already speaks.
+
+          ⚠️ THEY ARE TAPPABLE NOW (owner, 2026-09-17). This file used to say
+          "these are a receipt, not destinations, so nothing here is tappable"
+          and warn that taps would rebuild the eight-link menu the redesign
+          deleted. That worry was about ADDING links; this adds none. Each
+          number already names exactly one place, and a user who reads "23 on
+          slate" and presses it is not browsing a menu — they are following the
+          only thing that number can mean:
+
+              Saved      → the Library (same route, `onEnter`)
+              On slate   → /todos
+              Done today → /todos
+
+          Nothing NEW appears on screen for this — no chevrons, no underlines,
+          no hit-state borders. The affordance is the press dim that every
+          Pressable in the app already has, which is why this does not put the
+          menu back.
+
+          ⚠️ `Saved` does NOT push a route. Home and Library are the SAME route
+          (`/`), told apart by a session flag — see app/index.tsx. `onEnter` is
+          the one correct way in, and it is why this component has taken an
+          `onEnter` prop all along (unused since the Ask CTA was removed).
 
           "Done today" hides when the server didn't answer it — `null` is
           "didn't ask", and rendering that as a 0 would say "you've done
@@ -233,21 +279,39 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         {stage === 'ready' && (
           <>
             <View style={styles.metrics}>
-              <View style={styles.metric}>
+              <Pressable
+                style={styles.metric}
+                onPress={onEnter}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`${total} saved. Open your library.`}
+              >
                 <Text style={styles.metricN}>{total}</Text>
                 <Label>Saved</Label>
-              </View>
+              </Pressable>
               {slate ? (
-                <View style={styles.metric}>
+                <Pressable
+                  style={styles.metric}
+                  onPress={() => router.push('/todos')}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${slate.open} on your slate. Open your slate.`}
+                >
                   <Text style={styles.metricN}>{slate.open}</Text>
                   <Label>On slate</Label>
-                </View>
+                </Pressable>
               ) : null}
               {slate && slate.doneToday !== null ? (
-                <View style={styles.metric}>
+                <Pressable
+                  style={styles.metric}
+                  onPress={() => router.push('/todos')}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${slate.doneToday} done today. Open your slate.`}
+                >
                   <Text style={styles.metricN}>{slate.doneToday}</Text>
                   <Label>Done today</Label>
-                </View>
+                </Pressable>
               ) : null}
             </View>
             {/* What the library can still do for a save they already have —
@@ -275,26 +339,33 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         )}
       </View>
 
-      {/* ── The input. One job at every stage: paste a link. ──
+      {/* ── The input. One job while it is shown: paste a link. ──
           A Pressable shaped like the composer rather than a live field: the
           paste flow lives on /save, which already handles clipboard
           permissions, validation, quota and errors. Duplicating it here would
           be a second implementation to keep in sync — and the first to drift.
 
           ⚠️ This used to swap to an "ASK YOUR LIBRARY" button at `ready`
-          (owner removed it, 2026-08-10). Ask is a tab; the home screen's one
-          action is saving. Do not re-add a second destination here. */}
-      <View style={[styles.dock, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }]}>
-        <Pressable
-          style={styles.composer}
-          onPress={() => router.push('/save')}
-          accessibilityRole="button"
-          accessibilityLabel="Paste a link to save"
-        >
-          <Text style={styles.composerText}>Paste a link</Text>
-          <Icon name="copy" size={15} color={colors.textPrimary} />
-        </Pressable>
-      </View>
+          (owner removed it, 2026-08-10). Ask is a tab; do not re-add a second
+          destination here.
+
+          ⚠️ NOT RENDERED AT `ready` (owner, 2026-09-17) — the tab bar's `+ Save`
+          tab is the save route once the user has a library, and this was the
+          same destination stacked above it. See the header docblock for why
+          that is safe and why it stays for `empty` and `learning`. */}
+      {stage !== 'ready' && (
+        <View style={[styles.dock, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }]}>
+          <Pressable
+            style={styles.composer}
+            onPress={() => router.push('/save')}
+            accessibilityRole="button"
+            accessibilityLabel="Paste a link to save"
+          >
+            <Text style={styles.composerText}>Paste a link</Text>
+            <Icon name="copy" size={15} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -350,8 +421,11 @@ const styles = themed(() => StyleSheet.create({
 
   // Wide gaps rather than rules or boxes: the separation is whitespace, which
   // is the only separator this screen uses anywhere else.
-  metrics: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.xl },
-  metric: { gap: 2 },
+  metrics: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.lg },
+  // paddingVertical is the TAP TARGET, not decoration: the number plus its
+  // label is ~34pt tall, and 8 either side (plus hitSlop 8 at the call site)
+  // clears the 44pt minimum without moving anything on screen.
+  metric: { gap: 2, paddingVertical: spacing.sm },
   metricN: {
     color: colors.textPrimary,
     fontFamily: typeface.display,

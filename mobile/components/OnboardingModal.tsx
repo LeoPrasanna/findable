@@ -80,14 +80,14 @@ const STEPS: Step[] = [
     eyebrow: 'Sharing',
     title: 'Share to Findable\nwithout leaving the app.',
     description:
-      'Hit Share in Instagram, YouTube or LinkedIn and pick Findable. The save happens in the background — you stay exactly where you were, and it’s waiting in your library.',
+      'Hit Share in Instagram, YouTube, Threads or LinkedIn and pick Findable. The save happens in the background — you stay exactly where you were, and it’s waiting in your library.',
     figure: 'share',
   },
   {
     eyebrow: 'Ready',
     title: 'Save your first link.',
     description:
-      'Tap + to save from YouTube, Instagram, TikTok or LinkedIn. The summary and tags appear on their own.',
+      'Tap + to save from YouTube, Instagram, TikTok, Threads or LinkedIn. The summary and tags appear on their own.',
     figure: 'save',
   },
 ];

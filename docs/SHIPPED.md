@@ -21,6 +21,55 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ OWNER ROUND (2026-09-17) — 6 items: two screens, Threads, shopping, OTA banner
+
+All six shipped together. The reasoning that outlives the diff:
+
+1. **Slate dashboard card: ~203pt → ~121pt** (owner: "the entire box is taking a
+   lot of space"). Nothing was removed — same three counts, same tints, same
+   quote. The height came from four places and all four were spending it badly:
+   padding 32→16, the avatar row 42→34 (it set the card's height), the stat
+   tiles 48→24 (a stacked 29pt number over a 10pt label became one baseline,
+   "12 OPEN"), and the quote 65→39. ⚠️ The quote needed BOTH `numberOfLines={1}`
+   **and** `height={34}`: `compact` is a fixed 60pt viewport, so dropping the
+   line alone would have cost the line and saved zero height. `rollTravel(34,18,1)`
+   = 8pt, still a real roll — pinned in `rollGeometry.test.ts`, the third time
+   that arithmetic has needed a test.
+
+2. **Home counters are tappable** — Saved → Library, On slate / Done today →
+   `/todos`. This reverses a comment in `Landing.tsx` that said "these are a
+   receipt, not destinations" and warned taps would rebuild the eight-link menu
+   the redesign deleted. That worry was about ADDING links; this adds none, and
+   nothing new renders (no chevrons, no underlines) — the affordance is the
+   press dim every Pressable already has. ⚠️ `Saved` calls `onEnter`, it does
+   NOT push a route: Home and Library are the same route `/` told apart by a
+   session flag. `app/index.tsx` now also emits `libraryState` there, because
+   the tab bar re-reads that flag only on that event — without it the library
+   opened while the tab indicator stayed lit on Home. `onEnter` had been a
+   declared-but-unused prop since the Ask CTA was removed; this is what it was
+   for.
+
+3. **"Paste a link" is gone at `ready`** (≥ ASK_MIN_REELS saves). It stays for
+   `empty` and `learning` — a user with four saves hasn't met the tab bar yet,
+   and for them the dock IS the instruction. Safe because the tab bar carries a
+   `+ Save` tab and `/` is NOT in its `HIDE_ON` list, so the dock was a second
+   button to the same screen sitting directly above the first. ⚠️ The bottom
+   inset became the BODY's job in the same change — the dock was the only thing
+   keeping centred content off the floating tab bar.
+
+4. **Threads saves work.** See `docs/CONTEXT.md` → "Adding a platform is five
+   lists, not one". The load-bearing detail: both `threads.net` and
+   `threads.com`.
+
+5. **`shopping` category.** See `docs/CONTEXT.md` → "Categories are one list in
+   four places". The load-bearing detail: the prompt's disambiguation rule, not
+   the four list edits.
+
+6. **OTA update button in the profile panel.** See `docs/CONTEXT.md` → "OTA
+   updates were installed but invisible".
+
+---
+
 ## ▶ SILENT AI FAILURES (2026-09-07) — four paths failed without ever saying so
 
 Found by running the ECC `silent-failure-hunter` over `backend/app/` (37 except

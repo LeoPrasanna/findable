@@ -38,6 +38,19 @@ class TestDetectPlatform:
         assert extractor.detect_platform("https://fb.watch/x") == "facebook"
         assert extractor.detect_platform("https://example.com/x") == "unknown"
 
+    def test_threads_both_domains(self):
+        # Threads moved from threads.net to threads.com. The app shares .com
+        # today; every link shared before the move is still a live .net URL, so
+        # recognising only one host rejects half the real-world links.
+        assert extractor.detect_platform("https://www.threads.com/@a/post/DAbc123") == "threads"
+        assert extractor.detect_platform("https://www.threads.net/@a/post/DAbc123") == "threads"
+        assert extractor.detect_platform("https://threads.com/@a/post/DAbc123?xmt=z") == "threads"
+
+    def test_threads_does_not_shadow_instagram(self):
+        # Both are Meta and both can carry an `igshid`; the Instagram branch is
+        # checked first and must keep winning for instagram.com URLs.
+        assert extractor.detect_platform("https://www.instagram.com/reel/x?igshid=1") == "instagram"
+
 
 class TestOg:
     def test_reads_og_property(self):

@@ -12,6 +12,7 @@ import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './ki
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from './Avatar';
 import { markReopenPanel } from '../services/sessionFlags';
+import { useAppUpdate } from '../services/appUpdate';
 import { clearSaveCount } from '../services/saveCount';
 import { clearNotes } from '../services/notifyStore';
 import { NotificationCentre } from './NotificationCentre';
@@ -69,6 +70,10 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
     if (!visible) return;
     shareKeyReady().then(setShareArmed).catch(() => {});
   }, [visible]);
+  // Checks at most once per 5 minutes, and only while the panel is open — see
+  // services/appUpdate.ts. `status` is 'none' on web, in Expo Go and in a dev
+  // client, so the banner below simply never renders there.
+  const { status: updateStatus, apply: applyUpdate } = useAppUpdate(visible);
   const [deleting, setDeleting] = useState(false);
   // Seeded from the login-time fetch (services/usageCache), so the stats row
   // and the tier badge are already correct on the panel's FIRST frame instead
@@ -211,6 +216,60 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               </Pressable>
             </View>
             <Rule style={{ marginTop: spacing.sm }} />
+
+            {/* ── Update banner ───────────────────────────────────────────────
+                FIRST THING IN THE PANEL, above the identity block, and that
+                position is the point. `expo-updates` already downloaded this
+                bundle during a launch and was going to apply it on some later
+                one without ever saying so (see services/appUpdate.ts) — an
+                update the user cannot see or ask for is not shipped. Anywhere
+                further down and it is a footnote under three sections of
+                account chrome.
+
+                ⚠️ It renders ONLY when there is genuinely something to apply.
+                No "you're up to date" row: a permanent status line about
+                software versions is noise in a panel whose job is the account,
+                and it would be the one thing in here that is usually inert.
+
+                Reuses FilledButton — the same control as Go Pro, deliberately.
+                Inventing a banner style for this would make the rarest element
+                in the panel also the loudest. The two live states take
+                different presses (download-then-restart vs restart), so the
+                label says which, and the line beneath says what the press
+                costs: the app restarts.
+
+                ⚠️ KEEP EVERY LABEL AT OR UNDER ~18 CHARACTERS. FilledButton
+                UPPERCASES its label and sets it at font.sm with 1.4 tracking,
+                and this panel is at most 340pt wide — 292 of content, 252
+                inside the pill's own padding. That is roughly 26 characters
+                before the pill wraps to two lines and stops reading as a
+                button. "Update available — tap to update" was 32 and did. The
+                instruction lives in the Label underneath, where it has the
+                width for it. ── */}
+            {updateStatus !== 'none' && (
+              <View style={styles.update}>
+                <FilledButton
+                  label={
+                    updateStatus === 'downloading' ? 'Downloading…'
+                    : updateStatus === 'restarting' ? 'Restarting…'
+                    : updateStatus === 'ready' ? 'Restart to update'
+                    : 'Update available'
+                  }
+                  trailing={updateStatus === 'available' || updateStatus === 'ready' ? '→' : undefined}
+                  disabled={updateStatus === 'downloading' || updateStatus === 'restarting'}
+                  onPress={applyUpdate}
+                />
+                <Label>
+                  {updateStatus === 'downloading'
+                    ? 'Fetching the latest version.'
+                    : updateStatus === 'restarting'
+                    ? 'Reopening with the latest version.'
+                    : updateStatus === 'ready'
+                    ? 'Downloaded and ready. Tap to restart into it — your saves are on your account, so nothing is lost.'
+                    : 'Tap to update. Findable restarts to finish — your saves are on your account, so nothing is lost.'}
+                </Label>
+              </View>
+            )}
 
             {/* ── Identity. Square avatar, hairline frame — the reference app's
                 circular avatar is one of its signatures and this system is 0
@@ -592,6 +651,7 @@ const styles = themed(() => StyleSheet.create({
 
   upgrade: { marginBottom: spacing.md },
 
+  update: { marginTop: spacing.md, gap: spacing.sm },
   section: { marginTop: spacing.xl, marginBottom: spacing.sm },
 
   stats: { flexDirection: 'row', paddingVertical: spacing.md },

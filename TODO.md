@@ -498,6 +498,20 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   `"1.0.0"`.
 - `npm run typecheck` uses `--stack-size=16000`; plain `tsc` crashes on the type graph.
   That's expected, not a real error.
+- ⚠️ **Adding a save platform means `detect_platform()` FIRST** — anything it calls
+  `unknown` is a hard 400 before extraction is even attempted. Then five parity lists:
+  `_PROBE_HOSTS`, the wall/weak-title sets in `routes/reels.py`, and mobile's
+  `platformMeta` / `platformLabel` / `readFailure` placeholder regex. Threads (2026-09-17)
+  needed **both** `threads.net` and `threads.com` — Meta moved the domain and old links
+  still resolve on the old one. Same shape as the `lnkd.in` bug.
+- ⚠️ **An Ionicons name that doesn't exist renders an EMPTY BOX, not an error.** Verify a
+  brand glyph against
+  `node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Ionicons.json`
+  before shipping it — the failure is invisible until someone opens a real card.
+- ⚠️ **`Updates.isEnabled` is hardcoded `true` in the expo-updates WEB shim.** Any
+  updates check must guard `Platform.OS !== 'web'` as well. And `reloadAsync()` never
+  resolves on success (the JS context is torn down) — never schedule work after it.
+  Both live in `mobile/services/appUpdate.ts`.
 - **`EXPO_PUBLIC_*` is inlined at bundle time** — restart `expo start` after changing it;
   a browser refresh keeps the old value.
 - `radius.circle` has a **closed list of three sanctioned uses** — category bubbles, the

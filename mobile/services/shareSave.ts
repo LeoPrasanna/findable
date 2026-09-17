@@ -44,6 +44,8 @@ export function platformLabel(url: string): string {
   if (u.includes('instagram.com')) return 'Instagram';
   if (u.includes('facebook.com') || u.includes('fb.watch') || u.includes('fb.com')) return 'Facebook';
   if (u.includes('tiktok.com')) return 'TikTok';
+  // Both hosts stay live — see detect_platform() in backend/app/services/extractor.py.
+  if (u.includes('threads.net') || u.includes('threads.com')) return 'Threads';
   if (u.includes('linkedin.com')) return 'LinkedIn';
   return 'the web';
 }

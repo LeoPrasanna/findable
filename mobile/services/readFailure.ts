@@ -26,7 +26,7 @@
  */
 
 /** The label the backend installs when it has nothing: "Facebook Reel". */
-const PLACEHOLDER = /^(instagram|facebook|linkedin|tiktok|youtube|web|unknown)\s+(reel|post)$/i;
+const PLACEHOLDER = /^(instagram|facebook|linkedin|tiktok|threads|youtube|web|unknown)\s+(reel|post)$/i;
 
 export type ReadFailure = 'walled' | 'no-caption' | 'no-text';
 

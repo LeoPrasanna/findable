@@ -86,6 +86,8 @@ _PROBE_URL = "https://www.youtube.com/shorts/SXHMnicI6Pg"
 _PROBE_HOSTS = (
     "youtube.com", "youtu.be", "instagram.com", "facebook.com", "fb.watch",
     "tiktok.com", "linkedin.com",
+    # Threads runs on both hosts — see detect_platform() for why .net stays.
+    "threads.net", "threads.com",
     # LinkedIn's own shortener — every link the LinkedIn app shares is one of
     # these, and the probe is useless for LinkedIn shares without it.
     "lnkd.in",

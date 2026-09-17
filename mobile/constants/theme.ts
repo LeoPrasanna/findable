@@ -261,6 +261,13 @@ export const platformMeta: Record<string, { color: string; gradient: readonly [s
   tiktok:    { color: INK, gradient: [CARD, CARD], icon: 'logo-tiktok',    label: 'TikTok' },
   linkedin:  { color: INK, gradient: [CARD, CARD], icon: 'logo-linkedin',  label: 'LinkedIn' },
   facebook:  { color: INK, gradient: [CARD, CARD], icon: 'logo-facebook',  label: 'Facebook' },
+  // `logo-threads` is real in the installed Ionicons (@expo/vector-icons 15) —
+  // verified against the glyph map, not assumed. ⚠️ An Ionicons name that
+  // doesn't exist renders as an EMPTY BOX beside the label rather than
+  // throwing, so a brand glyph added here must be checked against
+  // `@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Ionicons.json`
+  // before it ships — the failure is silent and only visible on a real card.
+  threads:   { color: INK, gradient: [CARD, CARD], icon: 'logo-threads',   label: 'Threads' },
   twitter:   { color: INK, gradient: [CARD, CARD], icon: 'logo-twitter',   label: 'X' },
   unknown:   { color: INK, gradient: [CARD, CARD], icon: 'globe-outline',  label: 'Web' },
 };
@@ -277,7 +284,7 @@ export const platformMeta: Record<string, { color: string; gradient: readonly [s
 export const categoryMeta: Record<string, { icon: string; color: string }> = Object.fromEntries(
   ['all', 'fitness', 'cooking', 'tech', 'motivation', 'education', 'entertainment',
    'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance',
-   'hobby', 'general', 'other'].map(k => [k, { icon: k, color: PALETTES.dark.textTertiary }]),
+   'hobby', 'shopping', 'general', 'other'].map(k => [k, { icon: k, color: PALETTES.dark.textTertiary }]),
 );
 
 export const categoryFor = (c?: string | null) =>
@@ -446,7 +453,7 @@ _active = resolve(_preference);
 export const CATEGORY_OPTIONS = [
   'fitness', 'cooking', 'tech', 'motivation', 'education', 'entertainment',
   'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance',
-  'hobby', 'other',
+  'hobby', 'shopping', 'other',
 ] as const;
 
 export const spacing = {

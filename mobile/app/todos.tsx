@@ -98,6 +98,21 @@ function SpinningGear({ onPress }: { onPress: () => void }) {
   );
 }
 
+/**
+ * ⚠️ SHRUNK 2026-09-17 (owner: "the entire box is taking a lot of space").
+ *
+ * This was a stacked tile — a 29pt number in display size with a 10pt tracked
+ * label UNDER it, ~48pt tall before the row's own spacing. Three of them, plus
+ * a 42pt avatar row and a two-line rolling quote, made a card ~190pt tall
+ * sitting above the actual list on every open of this screen.
+ *
+ * Now the number and its label share ONE line. Nothing was removed — the same
+ * three counts in the same order, tinted the same way — so this is a size
+ * change, not a content change; anyone reading OPEN / DONE / OVERDUE still
+ * reads all three. The number stays visually dominant by weight and size
+ * against the tracked label, which is the hierarchy the tile always used;
+ * it just no longer spends a whole line on each half.
+ */
 function StatTile({ label, value, tint }: { label: string; value: number; tint?: string }) {
   return (
     <View style={styles.stat}>
@@ -580,11 +595,31 @@ export default function TodosScreen() {
               tint={overdueCount > 0 ? colors.danger : undefined}
             />
           </View>
-          {/* numberOfLines={2} matches the compact viewport exactly (42px at
-              lineHeight 18). Without it an over-long quote was sliced through
-              the middle of a word by `overflow: hidden`; with it, the worst
-              case is an honest ellipsis. See TODO_QUOTES for the char budget. */}
-          <RollingTagline compact shuffle numberOfLines={2} lines={TODO_QUOTES} style={styles.quotes} />
+          {/* ⚠️ numberOfLines WAS 2 — half the height this card just gave up
+              (owner, 2026-09-17). It is still capped rather than free, for the
+              original reason: without a cap an over-long quote is sliced
+              through the middle of a word by `overflow: hidden`, and an honest
+              ellipsis beats a severed one. TODO_QUOTES' char budget was written
+              for two lines, so the longest few now truncate — accepted; they
+              roll, so nothing is the only thing the user ever sees. Trim the
+              long entries there if it reads badly, do not restore the line.
+
+              ⚠️ `height` IS REQUIRED HERE, not a nicety. `compact` is a FIXED
+              60px viewport (RollingTagline's COMPACT_H), sized for two 18px
+              lines plus roll slack — dropping to one line without it would
+              have cost the second line and saved ZERO height, which is the
+              opposite of the point. 34 leaves (34-18)/2 = 8px of travel, so it
+              still rolls rather than degrading to a crossfade. See
+              components/rollGeometry.ts for why that arithmetic is load-bearing
+              (the same "the Slate lines are cut off" bug, twice). */}
+          <RollingTagline
+            compact
+            shuffle
+            numberOfLines={1}
+            height={34}
+            lines={TODO_QUOTES}
+            style={styles.quotes}
+          />
         </View>
 
         {error && (
@@ -756,17 +791,33 @@ const styles = themed(() => StyleSheet.create({
   },
 
   // ── Dashboard header ────────────────────────────────────────────────
+  // ⚠️ EVERY NUMBER HERE IS THE "box is taking a lot of space" FIX
+  // (owner, 2026-09-17) — padding md→sm, gap sm→xs. Read the note on StatTile
+  // before growing any of them back. Where the ~200pt went, so a future change
+  // can be weighed against it rather than guessed at:
+  //
+  //     padding      32 → 16      md → sm, both sides
+  //     avatar row   42 → 34      it set the head height, so it set the card's
+  //     stat row     48 → 24      stacked tiles → one baseline per stat
+  //     quote        65 → 39      2 lines in a 60pt viewport → 1 in 34
+  //     gaps         16 →  8      sm → xs, twice
+  //                 ───────────
+  //                 ~203 → ~121
+  //
+  // It earns that by being a strip above the list rather than a panel the list
+  // starts below.
   dash: {
     backgroundColor: colors.card, borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border,
-    padding: spacing.md, gap: spacing.sm,
+    padding: spacing.sm, gap: spacing.xs,
   },
   // Two-column head: face on the left, name + goal stacked on the right.
   dashHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // Square frame, 0 radius — the app went square on avatars everywhere (the
   // reference's circle was one of ITS signatures, not this system's).
+  // 42 → 34: the avatar set the head row's height, so it set the card's.
   dashAvatar: {
-    width: 42, height: 42,
+    width: 34, height: 34,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border,
   },
@@ -774,8 +825,14 @@ const styles = themed(() => StyleSheet.create({
   // goal count off the right edge.
   dashHeadMain: { flex: 1, minWidth: 0, gap: spacing.xs },
   statRow: { flexDirection: 'row' },
-  stat: { flex: 1, alignItems: 'center', gap: 2 },
-  statValue: { color: colors.textPrimary, fontSize: font.xxl, fontWeight: '800', lineHeight: 34 },
+  // `baseline` rather than `center`: a 20pt number and a 10pt label centred
+  // against each other float apart — sitting them on one baseline is what makes
+  // the pair read as a single word ("12 OPEN") instead of two stacked things.
+  stat: {
+    flex: 1, flexDirection: 'row', alignItems: 'baseline',
+    justifyContent: 'center', gap: 5,
+  },
+  statValue: { color: colors.textPrimary, fontSize: font.lg + 2, fontWeight: '800', lineHeight: 24 },
   statLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
   quotes: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.xs },
 

@@ -31,6 +31,16 @@ assert.equal(
   'a 60px viewport gives two 18px lines a real 12px roll',
 );
 
+// The Slate quote roller TODAY (owner, 2026-09-17: "the box is taking a lot of
+// space"). It dropped to one line and had to shed the 60px viewport with it —
+// `compact` is a FIXED 60, so numberOfLines={1} alone would have cost the line
+// and saved nothing. 34 is the smallest height that still leaves a real roll.
+assert.equal(
+  rollTravel(34, 18, 1),
+  8,
+  'the shrunk Slate quote still rolls 8px — below this it degrades to a crossfade',
+);
+
 /* ── the shapes that were always fine, and must stay fine ────────────────── */
 
 // One line in the compact roller: 21px of slack, so a near-full roll and

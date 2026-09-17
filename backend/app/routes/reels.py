@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_CATEGORIES = {
     "fitness", "cooking", "tech", "motivation", "education", "entertainment",
     "fashion", "beauty", "travel", "business", "news", "health", "finance",
-    "hobby", "other",
+    "hobby", "shopping", "other",
 }
 
 # Every background extraction/summary runs here, and ONLY here.
@@ -167,7 +167,7 @@ def save_reel(body: ReelSaveRequest,
     if platform in (None, "", "unknown"):
         raise HTTPException(
             status_code=422,
-            detail="Couldn't recognize this link. Try a public YouTube Short, Instagram Reel, TikTok, LinkedIn or Facebook post.",
+            detail="Couldn't recognize this link. Try a public YouTube Short, Instagram Reel, TikTok, Threads, LinkedIn or Facebook post.",
         )
 
     # Cache-first: a prior successful extraction (even of a since-deleted reel)
@@ -880,7 +880,7 @@ def _is_login_wall_title(t: str | None) -> bool:
         return True
     # A title that is nothing but the platform's own name is the wall's default.
     return s.lower().strip(" .•|-") in {
-        "instagram", "facebook", "linkedin", "tiktok", "youtube",
+        "instagram", "facebook", "linkedin", "tiktok", "youtube", "threads",
     }
 
 
@@ -899,7 +899,7 @@ def _weak_title(t: str | None) -> bool:
     if re.match(r'^day\s*\d+', s, re.IGNORECASE):
         return True
     # generic platform placeholders like "Facebook Reel", "Instagram Post"
-    if re.match(r'^(youtube|instagram|tiktok|linkedin|facebook|unknown|web)\s+(reel|post|video|short|link)s?$', s, re.IGNORECASE):
+    if re.match(r'^(youtube|instagram|tiktok|threads|linkedin|facebook|unknown|web)\s+(reel|post|video|short|link)s?$', s, re.IGNORECASE):
         return True
     # Instagram/TikTok generic auto-titles like "Video by someone", "Reel by someone"
     if re.match(r'^(video|reel|post|photo|clip)\s+by\b', s, re.IGNORECASE):
