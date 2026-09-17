@@ -331,7 +331,17 @@ ${body}`);
   }, [reels, numColumns]);
 
   if (!entered) {
-    return <Landing onEnter={() => { markEnteredLibrary(); setEntered(true); }} />;
+    // ⚠️ `emitUi('libraryState')` IS LOAD-BEARING, not a tidy-up. The tab bar
+    // tells Home from Library by a session flag, never by the pathname (they
+    // share `/`), so nothing re-renders it when the flag flips — it re-reads
+    // only on this event. Without it, tapping the home screen's "Saved" counter
+    // shows the library while the tab bar's indicator stays lit on Home. Same
+    // pairing TabBar.go() uses for its own Home/Library switch.
+    return (
+      <Landing
+        onEnter={() => { markEnteredLibrary(); setEntered(true); emitUi('libraryState'); }}
+      />
+    );
   }
 
   return (

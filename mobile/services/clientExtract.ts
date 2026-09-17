@@ -133,6 +133,7 @@ function detectPlatform(url: string): string {
   if (u.includes('instagram.com')) return 'instagram';
   if (u.includes('facebook.com') || u.includes('fb.watch') || u.includes('fb.com')) return 'facebook';
   if (u.includes('linkedin.com')) return 'linkedin';
+  if (u.includes('threads.net') || u.includes('threads.com')) return 'threads';
   return 'other';
 }
 
@@ -159,7 +160,7 @@ export function isLoginWall(title: string | undefined, html: string): boolean {
   if (/^(log ?in|sign ?in)\b/.test(t)) return true;
   if (/^(log|sign) ?in to /.test(t)) return true;
   // A title that is only the platform's own name is the wall's default.
-  if (['instagram', 'facebook', 'linkedin', 'tiktok'].includes(t.replace(/[\s.•|-]+$/, ''))) return true;
+  if (['instagram', 'facebook', 'linkedin', 'tiktok', 'threads'].includes(t.replace(/[\s.•|-]+$/, ''))) return true;
   // Belt and braces: the wall ships a login form even when the title varies by
   // locale ("Anmelden • Instagram"), and a real post page never does.
   return /<input[^>]+name=["'](username|email)["'][^>]*>/i.test(html)

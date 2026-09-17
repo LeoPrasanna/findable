@@ -5,7 +5,7 @@ import {
   CircleAlert, CloudDownload, Link2, FileText, Hourglass, Clock, House,
   ArrowRight, Minus, Plus, Activity, Repeat, Lock, RefreshCw, Circle,
   ChefHat, Cpu, Flame, GraduationCap, Clapperboard, Shirt, Plane, Briefcase,
-  Newspaper, HeartPulse, Wallet, Globe, ShoppingCart, CookingPot, Soup, Timer,
+  Newspaper, HeartPulse, Wallet, Globe, ShoppingCart, ShoppingBag, CookingPot, Soup, Timer,
   BookOpen, Code, PenLine, Search, Phone, Target, Brain, Wrench, Palette, Leaf,
   PartyPopper, Eye, EyeOff, Scissors, Mail, KeyRound,
   Menu, UserRound, Settings, Bell, Download, LogIn, ChevronRight, Bookmark, Layers, Shield,
@@ -40,7 +40,10 @@ const MAP: Record<string, any> = {
   // `hobby` is Palette — crafts/music/painting/model-making. Deliberately not
   // Leaf (already gardening-flavoured elsewhere) and not Sparkles (taken by
   // `general`); a category bubble that duplicates another's glyph is unusable.
-  finance: Wallet, hobby: Palette, general: Sparkles, other: Tag, all: Globe,
+  // `shopping` is ShoppingBag, NOT ShoppingCart — the cart is already the
+  // recipe step `gather` below, and the two render side by side on a cooking
+  // save that was categorised as shopping.
+  finance: Wallet, hobby: Palette, shopping: ShoppingBag, general: Sparkles, other: Tag, all: Globe,
 
   // ── Workout muscles / types ──
   strength: Dumbbell, cardio: HeartPulse, flexibility: Activity, fitness_repeat: Repeat,

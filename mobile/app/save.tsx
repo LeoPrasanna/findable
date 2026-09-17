@@ -28,7 +28,7 @@ const STEP_DELAYS = [0, 350, 800];
 const N = STEPS.length;
 
 const SAVE_NOTES = [
-  'Public Reels, YouTube Shorts, TikToks & LinkedIn posts work best.',
+  'Public Reels, YouTube Shorts, TikToks, Threads & LinkedIn posts work best.',
   'Your card saves instantly — the title, thumbnail and AI summary fill in on their own right after.',
   "Private or login-only content (and most Facebook reels) can't be read — paste the post text into Notes and tap Re-summarize instead.",
   'Cooking and workout saves can become step-by-step recipes and guided plans.',
@@ -46,7 +46,7 @@ function parseError(e: any): string {
   if (e?.name === 'AbortError' || detail.includes('timed out'))
     return 'Request timed out. The server is taking too long — try again.';
   if (detail.includes('minutes long')) return detail;
-  if (detail.includes('Could not extract')) return "Could not read this URL. Check it's a public Reel, Short, or TikTok and try again.";
+  if (detail.includes('Could not extract')) return "Could not read this URL. Check it's a public Reel, Short, TikTok or Threads post and try again.";
   if (detail.includes('login') || detail.includes('private')) return 'This content is private or requires login. Findable can only save public content.';
   if (detail.includes('fetch') || detail.includes('Network'))
     return "Can't reach the server. Make sure the backend is running on port 8000.";
@@ -198,7 +198,7 @@ export default function SaveScreen() {
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Label wide>New save</Label>
         <Title style={styles.title}>Paste a link.</Title>
-        <Label style={styles.hint}>YouTube Shorts · Instagram Reels · TikTok · LinkedIn</Label>
+        <Label style={styles.hint}>YouTube · Instagram · TikTok · Threads · LinkedIn</Label>
 
         {/* Underlined field — the system defines inputs with the same 1px seam
             it uses for every other boundary. */}

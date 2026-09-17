@@ -209,6 +209,21 @@ def detect_platform(url: str) -> str:
         return "linkedin"
     elif "facebook.com" in url or "fb.watch" in url or "fb.com" in url:
         return "facebook"
+    # ⚠️ TWO DOMAINS, BOTH LIVE. Threads launched on `threads.net` and moved to
+    # `threads.com`; the app now shares `threads.com` links, but every link
+    # posted before the move — and every one already sitting in someone's notes
+    # — is still a `threads.net` URL that redirects. Recognising only the new
+    # host would reject half the real-world links with "Couldn't recognize this
+    # link", which is the same bug `lnkd.in` caused for LinkedIn above.
+    #
+    # yt-dlp has no Threads extractor, so this never reaches the video path — it
+    # lands on the public page-meta fallback at the bottom of `extract_info()`,
+    # the same route LinkedIn and Facebook take. Threads serves og:title,
+    # og:description and og:image on public posts, and its images come from
+    # `cdninstagram.com` / `fbcdn.net`, which the thumbnail proxy already
+    # allowlists — so nothing else has to change for a Threads save to work.
+    elif "threads.net" in url or "threads.com" in url:
+        return "threads"
     return "unknown"
 
 

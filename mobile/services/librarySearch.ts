@@ -63,6 +63,11 @@ const SYNONYM_GROUPS: string[][] = [
   ['motivation', 'mindset', 'discipline', 'inspiration', 'motivational'],
   ['education', 'learning', 'study', 'studying'],
   ['hobby', 'craft', 'crafts', 'painting', 'music', 'diy'],
+  // Deliberately short. 'product', 'review' and 'store' were the obvious
+  // additions and all three were left out — they are generic enough to drag
+  // tech and beauty saves into every shopping search, which is exactly the
+  // pollution this list's own rule warns about.
+  ['shopping', 'haul', 'hauls', 'deal', 'deals', 'buy', 'shop'],
 ];
 
 const SYNONYMS = new Map<string, Set<string>>();
