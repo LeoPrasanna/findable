@@ -1,74 +1,64 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, ActivityIndicator, TextInputProps, Animated,
+  View, Text, StyleSheet, Platform,
+  ActivityIndicator, Animated,
   Easing, AccessibilityInfo, Linking,
 } from 'react-native';
-import type { ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
 import { PRIVACY_URL, TERMS_URL } from '../constants/links';
-import { supabase } from '../services/supabase';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { signInWithProvider, signInWithApple, OAuthProvider } from '../services/oauth';
 import { useAuth } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
 
-import { Label, Body, Wordmark, GhostButton, FilledButton, Rule } from './kit';
+import { Label, Wordmark } from './kit';
 import { MockReel, MOCK_REEL_H } from './MockReel';
-import { colors, spacing, font, radius, tracking, typeface, themed, gradients, hazeLocations, isDark } from '../constants/theme';
+import { colors, spacing, font, radius, typeface, themed, gradients, hazeLocations, isDark } from '../constants/theme';
 
 /**
- * APPLE AND GOOGLE ARE BOTH REAL (Apple wired 2026-09-09).
+ * The sign-in screen. TWO WAYS IN, AND ONLY TWO: Apple and Google.
  *
- * Apple uses the NATIVE sheet (`expo-apple-authentication` + Supabase's
- * `signInWithIdToken`), not the browser flow Google uses — see the long note
- * in services/oauth.ts for why that choice avoids a key that expires every six
- * months. The consequence here is that the Apple button is **iOS-only**: the
- * native API does not exist on Android or web, so the button is not rendered
- * there at all rather than shown and then failing.
+ * ⚠️ EMAIL AND PASSWORD WERE REMOVED HERE (owner, 2026-09-23) — do not
+ * reinstate them without being asked. This deleted the whole second step of
+ * this screen: the sign-in/create-account modes, the password strength meter,
+ * the profile-name fields, and every `supabase.auth.signInWithPassword` /
+ * `signUp` call in the app.
  *
- * ⚠️ GUIDELINE 4.8 IS NOW SATISFIED FOR iOS — an app offering a third-party
- * social login must also offer Sign in with Apple. Do not make the Apple button
- * conditional on anything other than platform availability, and do not ship an
- * iOS build with Google present and Apple absent.
+ * The reasoning is a cost one and it holds: an email account is only as good as
+ * the mail that supports it, and confirmation, password-reset and change-of-
+ * address mail all need an SMTP provider. Supabase's built-in sender caps at a
+ * few messages an hour and is explicitly not for production, so email sign-in
+ * meant buying and running a mail pipeline to support the least-used door.
+ * Deleting the door deletes the pipeline: **SMTP is no longer a launch
+ * blocker.**
+ *
+ * ⚠️ WHAT THIS COSTS, so it is not rediscovered as a bug:
+ *   • Any account created with a password can no longer sign in ANYWHERE in
+ *     this app. If such accounts exist, they are stranded — there is no screen
+ *     left that accepts a password. The same address arriving via Google is a
+ *     DIFFERENT user row unless Supabase is set to link identities by email.
+ *   • Android now has exactly one door. Google sign-in failing there is a total
+ *     lockout, not a degraded experience, because Apple's browser flow was
+ *     never wired (TODO.md → "Sign in with Apple"). iOS keeps two.
+ *   • Removing the UI does not close the server side. Supabase's Email provider
+ *     must be switched OFF in the dashboard, or the endpoint still accepts
+ *     signups this app can never sign into. 👤 Tracked in TODO.md.
+ *
+ * Apple uses the NATIVE sheet (`expo-apple-authentication` +
+ * `signInWithIdToken`), not the browser flow Google uses — see the long note in
+ * services/oauth.ts. It is iOS-only and gated on `isAvailableAsync`, never on
+ * `Platform.OS` alone.
+ *
+ * ⚠️ App Store Guideline 4.8 binds on iOS: an app offering third-party sign-in
+ * must offer Sign in with Apple with equivalent prominence. That is why Apple
+ * is the FILLED button on iOS and Google the outlined one — never the reverse.
+ * Android has no such rule and no Apple flow, so Google is filled there.
  */
 
-type Mode = 'signin' | 'signup';
-type Step = 'welcome' | 'form';
-
-// Client-side password gate for signup. This is UX only — it can't be trusted
-// (anyone can call the Supabase API directly), so the REAL floor is the
-// Supabase dashboard password policy + leaked-password protection (owner
-// action, see TODO). Length-first per NIST 800-63B: we require length and
-// merely ENCOURAGE variety rather than forcing composition rules.
-const MIN_PASSWORD = 8;
-
-function passwordStrength(pw: string): { level: 0 | 1 | 2 | 3; label: string; ok: boolean } {
-  if (pw.length < MIN_PASSWORD) {
-    return { level: 0, label: `Use at least ${MIN_PASSWORD} characters`, ok: false };
-  }
-  const variety =
-    (/[a-z]/.test(pw) ? 1 : 0) + (/[A-Z]/.test(pw) ? 1 : 0) +
-    (/[0-9]/.test(pw) ? 1 : 0) + (/[^A-Za-z0-9]/.test(pw) ? 1 : 0);
-  if (pw.length >= 12 && variety >= 3) return { level: 3, label: 'Strong password', ok: true };
-  if (pw.length >= 10 || variety >= 3) return { level: 2, label: 'Good — longer is stronger', ok: true };
-  return { level: 1, label: 'OK — add length or a number/symbol to strengthen', ok: true };
-}
-
-// Surface Supabase's auth errors as short, human messages.
-function friendly(message: string): string {
-  const m = message.toLowerCase();
-  if (m.includes('invalid login')) return 'Wrong email or password.';
-  if (m.includes('already registered')) return 'That email already has an account — sign in instead.';
-  if (m.includes('password should be') || m.includes('password is too weak')) return `Password must be at least ${MIN_PASSWORD} characters.`;
-  if (m.includes('unable to validate email') || m.includes('invalid email')) return 'Enter a valid email address.';
-  if (m.includes('network')) return "Couldn't reach the server. Check your connection.";
-  return message || 'Something went wrong. Try again.';
-}
 
 /* ── Welcome backdrop ─────────────────────────────────────────────────────── */
 
@@ -91,6 +81,7 @@ const DRIFT_S = 34;
  * even columns rise. Opposing motion is what stops a tilted grid reading as one
  * sliding sheet, and it's the move that makes the whole thing feel alive.
  */
+
 function DriftColumn({ seeds, dir, seconds }: { seeds: number[]; dir: 1 | -1; seconds: number }) {
   const y = useRef(new Animated.Value(0)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -188,69 +179,14 @@ function ReelWallBackdrop() {
   );
 }
 
-/** An underlined field — a rule, not a box. The system has no card chrome, so
- *  an input is defined by the same 1px seam as everything else. */
-type FieldProps = TextInputProps & {
-  label: string;
-  trailing?: ReactNode;
-  /** Renders the standard clear (×) affordance while there is text. */
-  onClear?: () => void;
-};
-
-function Field({ label, trailing, onClear, ...rest }: FieldProps) {
-  const [focused, setFocused] = useState(false);
-  const hasText = !!rest.value;
-  return (
-    <View style={styles.field}>
-      <Label>{label}</Label>
-      <View style={styles.fieldRow}>
-        <TextInput
-          style={styles.input}
-          placeholderTextColor={colors.textTertiary}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          {...rest}
-        />
-        {/* ⚠️ The clear button is the whole fix for "the field keeps my old
-            text". Emptying a field by holding backspace on a phone keyboard is
-            genuinely tedious, and every mainstream sign-in form gives you a ×.
-            Shown only when there is something to clear and the field is
-            editable, so it never appears on a disabled form mid-submit. */}
-        {onClear && hasText && rest.editable !== false ? (
-          <Pressable
-            hitSlop={10}
-            onPress={() => { haptics.tap(); onClear(); }}
-            accessibilityLabel={`Clear ${label.toLowerCase()}`}
-          >
-            <Icon name="close" size={16} color={colors.textTertiary} />
-          </Pressable>
-        ) : null}
-        {trailing}
-      </View>
-      <View style={[styles.fieldRule, focused && styles.fieldRuleOn]} />
-    </View>
-  );
-}
-
 export function LoginScreen() {
   const { triggerCelebrate } = useAuth();
   const insets = useSafeAreaInsets();
-  const [step, setStep] = useState<Step>('welcome');
-  const [mode, setMode] = useState<Mode>('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [showPw, setShowPw] = useState(false);
   /** Which social provider is mid-flight, so its button can show a spinner and
    *  the others deactivate. `null` when nothing is running. */
   const [social, setSocial] = useState<OAuthProvider | null>(null);
 
-  const isSignup = mode === 'signup';
   const shakeX = useRef(new Animated.Value(0)).current;
 
   // A quick left-right shake — the universal "that didn't work" cue. Kept
@@ -265,37 +201,11 @@ export function LoginScreen() {
     ).start();
   };
 
-  /** Empty every field. Used when leaving the form entirely — a half-typed
-   *  credential must not still be sitting there when the screen is reopened. */
-  const resetForm = () => {
-    setEmail(''); setPassword('');
-    setFirstName(''); setLastName(''); setNickname('');
-    setShowPw(false); setError(''); setNotice('');
-  };
-
-  const switchMode = (m: Mode) => {
-    if (m === mode) return;
-    haptics.tap();
-    setMode(m);
-    // ⚠️ The PASSWORD is dropped on a mode switch, the email is kept. That is
-    // the industry-standard split and it is not arbitrary: the email is almost
-    // always the same address either way (you mistyped which tab you were on),
-    // while a password typed for "sign in" carried into "create account" is a
-    // silent trap — it becomes your new account's password without you ever
-    // reading it, and any strength feedback shown for it was never evaluated.
-    setPassword('');
-    setShowPw(false);
-    setError('');
-    setNotice('');
-  };
-
   const fail = (msg: string) => {
     haptics.error();
     setError(msg);
     shake();
   };
-
-  const pwStrength = passwordStrength(password);
 
   /**
    * Social sign-in. On success the AuthProvider listener flips the gate, exactly
@@ -324,7 +234,7 @@ export function LoginScreen() {
     if (social) return;
     haptics.tap();
     setSocial(provider);
-    setError(''); setNotice('');
+    setError('');
     const { error: err, cancelled } =
       provider === 'apple' ? await signInWithApple() : await signInWithProvider(provider);
     setSocial(null);
@@ -334,53 +244,7 @@ export function LoginScreen() {
     triggerCelebrate();
   };
 
-  const submit = async () => {
-    const e = email.trim();
-    if (!e || !password) { fail('Enter your email and password.'); return; }
-    if (mode === 'signup' && !firstName.trim()) { fail('Enter your first name.'); return; }
-    if (mode === 'signup' && !pwStrength.ok) { fail(`Use at least ${MIN_PASSWORD} characters for your password.`); return; }
-    setBusy(true); setError(''); setNotice('');
-    try {
-      if (mode === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email: e, password });
-        if (error) throw error;
-        haptics.success();
-        triggerCelebrate();
-        // On success, AuthProvider's listener flips the gate to the app — no nav here.
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email: e,
-          password,
-          options: {
-            data: {
-              first_name: firstName.trim(),
-              last_name: lastName.trim() || undefined,
-              nickname: nickname.trim() || undefined,
-            },
-          },
-        });
-        if (error) throw error;
-        if (data.session) {
-          // Email confirmation is OFF — they're signed in immediately.
-          haptics.success();
-          triggerCelebrate();
-        } else {
-          // Confirmation ON — no session yet; tell them to verify.
-          haptics.success();
-          setNotice('Check your email to confirm your account, then sign in.');
-          setMode('signin');
-        }
-      }
-    } catch (err: any) {
-      fail(friendly(err?.message || ''));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /* ── Step 1: welcome ─────────────────────────────────────────────────────── */
-  if (step === 'welcome') {
-    return (
+  return (
       <View style={styles.container}>
         {/* ── Atmosphere is DARK-ONLY (2026-08-09) ───────────────────────────
             In light, MockReel's cards are near-white on a white canvas, so the
@@ -422,51 +286,74 @@ export function LoginScreen() {
             <Label wide style={styles.welcomeSub}>Everything you saved · actually findable</Label>
           </View>
 
-          {/* Three entry points. Apple is iOS-only (see the note above). */}
-          <View style={styles.authRow}>
+          {/*
+              ⚠️ THE FILLED BUTTON IS THE PLATFORM'S OWN, and which one that is
+              differs by platform (owner, 2026-09-23):
+
+                iOS      Apple filled, Google outlined
+                Android  Google filled, Apple absent
+
+              On iOS that is not a taste call. Guideline 4.8 requires Sign in
+              with Apple to be offered with equivalent prominence wherever a
+              third-party login is, so Apple may never be the quieter of the
+              two. Android has no such rule and no Apple flow at all.
+
+              Before this, EMAIL was the filled button — the app was steering
+              people through the one door being closed.
+
+              The row is wrapped in the shake transform so a failed sign-in
+              still moves something. It used to shake the form's fields, and
+              those are gone; an error that only appears as text is the one
+              people miss. */}
+          <Animated.View style={[styles.authRow, { transform: [{ translateX: shakeX }] }]}>
             {appleReady ? (
               <Pressable
-                style={[styles.authBtn, !!social && social !== 'apple' && styles.authBtnOff]}
+                style={[
+                  styles.authBtn,
+                  Platform.OS === 'ios' && styles.authBtnPrimary,
+                  !!social && social !== 'apple' && styles.authBtnOff,
+                ]}
                 onPress={() => social_signin('apple')}
                 disabled={!!social}
                 accessibilityRole="button"
                 accessibilityLabel="Continue with Apple"
               >
                 {social === 'apple'
-                  ? <ActivityIndicator color={colors.textPrimary} />
-                  : <Ionicons name="logo-apple" size={24} color={colors.textPrimary} />}
+                  ? <ActivityIndicator color={Platform.OS === 'ios' ? colors.background : colors.textPrimary} />
+                  : <Ionicons
+                      name="logo-apple" size={24}
+                      color={Platform.OS === 'ios' ? colors.background : colors.textPrimary}
+                    />}
               </Pressable>
             ) : null}
             <Pressable
-              style={[styles.authBtn, !!social && social !== 'google' && styles.authBtnOff]}
+              style={[
+                styles.authBtn,
+                Platform.OS !== 'ios' && styles.authBtnPrimary,
+                !!social && social !== 'google' && styles.authBtnOff,
+              ]}
               onPress={() => social_signin('google')}
               disabled={!!social}
               accessibilityRole="button"
               accessibilityLabel="Continue with Google"
             >
               {social === 'google'
-                ? <ActivityIndicator color={colors.textPrimary} />
-                : <Ionicons name="logo-google" size={22} color={colors.textPrimary} />}
+                ? <ActivityIndicator color={Platform.OS !== 'ios' ? colors.background : colors.textPrimary} />
+                : <Ionicons
+                    name="logo-google" size={22}
+                    color={Platform.OS !== 'ios' ? colors.background : colors.textPrimary}
+                  />}
             </Pressable>
-            <Pressable
-              style={[styles.authBtn, styles.authBtnPrimary, !!social && styles.authBtnOff]}
-              onPress={() => { haptics.tap(); setStep('form'); }}
-              disabled={!!social}
-              accessibilityRole="button"
-              accessibilityLabel="Continue with email"
-            >
-              <Icon name="mail" size={22} color={colors.background} />
-            </Pressable>
-          </View>
+          </Animated.View>
           <Label tone="ink" wide style={styles.authHint}>
             {social === 'google' ? 'Opening Google…'
               : social === 'apple' ? 'Opening Apple…'
-              : appleReady ? 'Apple, Google or email' : 'Google or email'}
+              : appleReady ? 'Continue with Apple or Google' : 'Continue with Google'}
           </Label>
 
-          {/* Errors have to be visible on THIS step too. They used to render
-              only on the form step, so a failed Google sign-in shook a screen
-              with no message on it. */}
+          {/* The only place an error can appear now. Sign-in failures used to
+              render on the form step, so a failed Google sign-in shook a screen
+              that had no message on it. */}
           {error ? (
             <View style={styles.msgRow}>
               <Icon name="alert-circle" size={14} color={colors.textPrimary} />
@@ -504,150 +391,6 @@ export function LoginScreen() {
       </View>
     );
   }
-
-  /* ── Step 2: the form ────────────────────────────────────────────────────── */
-  return (
-    /* ⚠️ `behavior="padding"` ON ANDROID TOO — this used to be
-       `Platform.OS === 'ios' ? 'padding' : undefined`, i.e. a no-op on Android.
-       That was correct when Android windows resized under `adjustResize`, but
-       Expo SDK 54+ forces EDGE-TO-EDGE on Android, and an edge-to-edge window
-       does not resize for the IME. So nothing compensated and the keyboard sat
-       on top of the form — you could not see the field you were typing into.
-       Padding is exactly right here precisely because the window no longer
-       shrinks: KAV adds the keyboard's own height and nothing double-counts.
-       Same fix in app/save.tsx, app/ask.tsx, app/profile.tsx and TodoEditor. */
-    <KeyboardAvoidingView style={styles.container} behavior="padding">
-      <ScrollView
-        contentContainerStyle={[styles.formInner, { paddingTop: insets.top + spacing.md }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Pressable
-          /* Leaving the form clears it. Previously only `error` was reset, so
-             backing out and coming in again showed the last email and password
-             still typed in — which is what "it retains the old data" was. */
-          onPress={() => { haptics.tap(); setStep('welcome'); resetForm(); }}
-          hitSlop={12}
-          style={styles.back}
-        >
-          <Icon name="back" size={20} color={colors.textPrimary} />
-        </Pressable>
-
-        <Wordmark size={34} style={styles.formWordmark} />
-
-        {/* Mode switch — two tracked labels and a rule, not a segmented pill.
-            The active one is ink, the other ash. Hierarchy without a fill. */}
-        <View style={styles.modes}>
-          <Pressable onPress={() => switchMode('signin')} hitSlop={8}>
-            <Label tone={!isSignup ? 'ink' : 'muted'} wide>Sign in</Label>
-          </Pressable>
-          <View style={styles.modeDiv} />
-          <Pressable onPress={() => switchMode('signup')} hitSlop={8}>
-            <Label tone={isSignup ? 'ink' : 'muted'} wide>Create account</Label>
-          </Pressable>
-        </View>
-        <Rule />
-
-        <Animated.View style={[styles.fields, { transform: [{ translateX: shakeX }] }]}>
-          {isSignup && (
-            <>
-              <Field
-                label="First name" value={firstName} onChangeText={setFirstName}
-                onClear={() => setFirstName('')}
-                placeholder="Required" autoCapitalize="words" editable={!busy}
-                accessibilityLabel="First name"
-              />
-              <Field
-                label="Last name" value={lastName} onChangeText={setLastName}
-                onClear={() => setLastName('')}
-                placeholder="Optional" autoCapitalize="words" editable={!busy}
-                accessibilityLabel="Last name, optional"
-              />
-              <Field
-                label="Nickname" value={nickname} onChangeText={setNickname}
-                onClear={() => setNickname('')}
-                placeholder="What we'll call you" autoCapitalize="words" editable={!busy}
-                accessibilityLabel="Nickname, optional"
-              />
-            </>
-          )}
-
-          <Field
-            label="Email" value={email} onChangeText={setEmail}
-            onClear={() => setEmail('')}
-            placeholder="you@example.com"
-            autoCapitalize="none" autoCorrect={false}
-            keyboardType="email-address" inputMode="email" editable={!busy}
-            textContentType="emailAddress" autoComplete="email"
-            accessibilityLabel="Email"
-          />
-          <Field
-            label="Password" value={password} onChangeText={setPassword}
-            onClear={() => setPassword('')}
-            placeholder={isSignup ? `${MIN_PASSWORD}+ characters` : 'Your password'}
-            secureTextEntry={!showPw} autoCapitalize="none" editable={!busy}
-            /* Tells the OS password manager which field this is, so it offers to
-               fill/save instead of leaving the user to retype. `newPassword` on
-               signup is what makes Android/iOS offer a generated one. */
-            textContentType={isSignup ? 'newPassword' : 'password'}
-            autoComplete={isSignup ? 'new-password' : 'current-password'}
-            onSubmitEditing={submit} returnKeyType="go"
-            accessibilityLabel="Password"
-            trailing={
-              <Pressable hitSlop={10} onPress={() => { haptics.tap(); setShowPw((s) => !s); }}>
-                <Icon name={showPw ? 'eye-off' : 'eye'} size={17} color={colors.textTertiary} />
-              </Pressable>
-            }
-          />
-
-          {/* Strength meter. With no colour available, the three segments read
-              by FILL COUNT and the words say the rest — which was always the
-              accessible way to do this anyway. */}
-          {isSignup && password.length > 0 && (
-            <View style={styles.strengthWrap} accessibilityLabel={`Password strength: ${pwStrength.label}`}>
-              <View style={styles.strengthTrack}>
-                {[0, 1, 2].map((i) => (
-                  <View key={i} style={[styles.strengthSeg, i < pwStrength.level && styles.strengthSegOn]} />
-                ))}
-              </View>
-              <Label>{pwStrength.label}</Label>
-            </View>
-          )}
-        </Animated.View>
-
-        {error ? (
-          <View style={styles.msgRow}>
-            <Icon name="alert-circle" size={14} color={colors.textPrimary} />
-            <Text style={styles.msgText}>{error}</Text>
-          </View>
-        ) : null}
-        {notice ? (
-          <View style={styles.msgRow}>
-            <Icon name="checkmark" size={14} color={colors.textPrimary} />
-            <Text style={styles.msgText}>{notice}</Text>
-          </View>
-        ) : null}
-
-        {busy ? (
-          <View style={styles.busy}><ActivityIndicator color={colors.textPrimary} /></View>
-        ) : (
-          <FilledButton
-            label={isSignup ? 'Create account' : 'Sign in'}
-            onPress={submit}
-            trailing="→"
-            style={styles.submit}
-          />
-        )}
-
-        <Body style={styles.helper}>
-          {isSignup
-            ? 'Free to start. Unlimited saves. Cancel anytime.'
-            : 'Your saves, summaries and library — synced to you.'}
-        </Body>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
 
 const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -723,30 +466,8 @@ const styles = themed(() => StyleSheet.create({
   },
   legalStrong: { color: colors.textSecondary, textDecorationLine: 'underline' },
 
-  // ── Step 2 ──
-  formInner: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
-  back: { alignSelf: 'flex-start', paddingVertical: spacing.sm, paddingRight: spacing.md },
-  formWordmark: { marginTop: spacing.xl, marginBottom: spacing.xl },
-  modes: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
-  modeDiv: { width: 1, height: 10, backgroundColor: colors.ghostLine },
 
-  fields: { marginTop: spacing.lg, gap: spacing.lg },
-  field: { gap: spacing.xs },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  input: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontFamily: typeface.body,
-    fontSize: font.lg,
-    paddingVertical: spacing.sm,
-  },
-  fieldRule: { height: 1, backgroundColor: colors.ghostLine },
-  fieldRuleOn: { backgroundColor: colors.textPrimary },
 
-  strengthWrap: { gap: spacing.sm },
-  strengthTrack: { flexDirection: 'row', gap: 3 },
-  strengthSeg: { flex: 1, height: 2, backgroundColor: colors.ghostLine },
-  strengthSegOn: { backgroundColor: colors.textPrimary },
 
   msgRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
   msgText: {
@@ -757,7 +478,4 @@ const styles = themed(() => StyleSheet.create({
     lineHeight: 18,
   },
 
-  busy: { marginTop: spacing.xl, paddingVertical: spacing.md, alignItems: 'center' },
-  submit: { marginTop: spacing.xl },
-  helper: { marginTop: spacing.md, fontSize: font.sm, textAlign: 'center' },
 }));
