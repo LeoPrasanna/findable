@@ -59,15 +59,26 @@ because a pause is reversible. A deletion would not have been.
   Wire real SMTP only if email auth ever comes back. Free tiers when that day comes:
   **Resend** (3k/mo, best DX), **Brevo** (300/day), **SendGrid** (100/day); the real
   prerequisite is a **verified sending domain** (SPF + DKIM), so buy the domain first.
-  - [ ] 🔴 **Remove the email/password path from `mobile/components/LoginScreen.tsx`**
-    before public launch. It still renders a full signup form with a password-strength
-    meter, which contradicts the decision above and the published Privacy Policy (which
-    describes it as "legacy … being retired"). ⚠️ **Do not delete it before the 3 dev
-    test accounts are migrated** — they sign in with email and password today, and
-    ripping the form out locks you out of your own staging data. Delete the legacy
-    sentence in `site/privacy.html` §2 in the same commit.
-  - ⚠️ **The cost of Google/Apple-only, stated once so it is a decision and not a
-    surprise:** on Android there is exactly ONE door. Apple sign-in is iOS-only (it needs
+  - [x] **Email/password removed from `mobile/components/LoginScreen.tsx`** (owner,
+    2026-09-23: "remove completely the email part"). The whole second step went with it —
+    sign-in/create-account modes, the password-strength meter, the profile-name fields,
+    and both `supabase.auth.signInWithPassword` / `signUp` calls. The screen is now one
+    step: Apple (iOS) and Google. The "legacy … being retired" sentence is gone from
+    `site/privacy.html` §2 in the same commit, so the policy and the app agree again.
+  - [ ] 🔴 👤 **Switch the Email provider OFF in Supabase Auth → Providers — BOTH projects**
+    (dev `ymclmbmmwtczspnmccsy`, prod `lukmwwcilrjqqtgqbynq`). Deleting the UI does not
+    close the endpoint: `/auth/v1/signup` still accepts an email and password, and every
+    account it mints is one this app has no screen to sign into. Until this is off, the
+    Privacy Policy's "You sign in with Google or Apple" is true of the app and false of
+    the service behind it.
+  - [ ] 👤 **The 3 dev test accounts sign in with email and password — they are now
+    stranded** on any device running this build. Re-create them through Google (a Gmail
+    alias like `you+test1@gmail.com` works and costs nothing), or reach their data
+    through the Supabase dashboard. ⚠️ Signing in with Google using the SAME address does
+    NOT recover the old account unless Supabase is configured to link identities by
+    email — it creates a second, empty user row.
+  - ⚠️ **The cost of Google/Apple-only — now REAL, not hypothetical** (shipped
+    2026-09-23): on Android there is exactly ONE door. Apple sign-in is iOS-only (it needs
     the native `expo-apple-authentication` flow), so if Google OAuth breaks — consent
     screen misconfigured, client secret rotated, project suspended — every Android user
     is locked out with no fallback and no password reset to fall back on. Watch item, not
