@@ -301,7 +301,15 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
   the audio fallback (`transcriber.transcribe`, $0.006/audio-min) is dormant today only
   because the key is unset. **Do not set that key without adding the cap first.**
 - [~] **Pre-launch security pass.** Prompt-injection containment is done (`is_sensitive`
-  is a one-way latch). Remaining: live-model adversarial evals (steering resistance can't
+  is a one-way latch). SSRF on the save path is closed both ways (2026-09-23): the
+  submitted URL is host-matched, not substring-matched, and `_fetch_page` re-checks every
+  redirect hop. **Residual, accepted for now: yt-dlp.** It does its own networking with no
+  host policy we can hook, so an open redirect on YouTube/Instagram/TikTok/Facebook could
+  still send *it* somewhere internal. Much narrower than what was closed — it needs a live
+  open redirect on a major platform, and yt-dlp parses the answer as media rather than
+  handing it back as page text — but it is not zero. Options if it ever matters: run
+  extraction egress through a proxy with an allowlist, or drop to a pinned-IP HTTP client.
+  Remaining: live-model adversarial evals (steering resistance can't
   be unit-tested), `/security-review` on the branch before first deploy, a ZAP baseline
   scan against staging, and one load smoke (~50 concurrent saves).
   Deliberately **not** doing: DDoS self-testing (violates provider ToS — Cloudflare is

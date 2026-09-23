@@ -97,6 +97,53 @@ class TestDetectPlatform:
         assert extractor.detect_platform("https://www.instagram.com/reel/x?igshid=1") == "instagram"
 
 
+class TestRedirectHops:
+    """`next_hop` re-applies the platform allowlist to every redirect.
+
+    ⚠️ Validating the submitted URL is worthless if the fetcher then chases a
+    redirect anywhere. An open redirect on a platform host — every large platform
+    has had one — turned a valid save into a request to any internal address,
+    made by our server, with the answer parsed onto a card. Closed 2026-09-23,
+    the same shape of fix the thumbnail proxy already used.
+    """
+
+    def test_real_chains_survive(self):
+        # These are not edge cases, they are the normal path: lnkd.in is the ONLY
+        # URL the LinkedIn app shares, youtu.be and fb.watch are shorteners, and
+        # threads.net redirects to threads.com.
+        assert extractor.next_hop(
+            "https://lnkd.in/p/abc", "https://www.linkedin.com/posts/x"
+        ) == "https://www.linkedin.com/posts/x"
+        assert extractor.next_hop(
+            "https://fb.watch/x", "https://www.facebook.com/reel/1"
+        ) == "https://www.facebook.com/reel/1"
+        assert extractor.next_hop(
+            "https://www.threads.net/@a/p/1", "https://www.threads.com/@a/p/1"
+        ) == "https://www.threads.com/@a/p/1"
+        # Relative Location resolves against the current URL and stays on host.
+        assert extractor.next_hop(
+            "https://youtu.be/abc", "/watch?v=abc"
+        ) == "https://youtu.be/watch?v=abc"
+
+    def test_hops_off_the_allowlist_are_refused(self):
+        off = [
+            # The open-redirect gadget: a legitimate platform page sending us to
+            # the cloud metadata endpoint or a private address.
+            ("https://www.facebook.com/l.php", "http://169.254.169.254/latest/meta-data/"),
+            ("https://www.instagram.com/x", "http://10.0.0.5/"),
+            ("https://www.youtube.com/x", "https://evil.example/"),
+            # Protocol-relative — the classic way past a naive "starts with http" check.
+            ("https://www.youtube.com/x", "//evil.example/"),
+            # Lookalike host.
+            ("https://www.youtube.com/x", "https://youtube.com.evil.example/"),
+            ("https://www.youtube.com/x", "file:///etc/passwd"),
+            # A redirect with no Location at all.
+            ("https://www.youtube.com/x", ""),
+        ]
+        for current, location in off:
+            assert extractor.next_hop(current, location) is None, location
+
+
 class TestOg:
     def test_reads_og_property(self):
         html = '<meta property="og:title" content="Hello World">'

@@ -83,8 +83,13 @@ _PROXY = settings.EXTRACTOR_PROXY_URL or None
 # reuse (no TLS handshake per caption fetch) and, more importantly, a cookie jar:
 # TikTok sets msToken/ttwid on first contact and expects them back, so a stateless
 # request reads as a scraper regardless of headers.
+# ⚠️ `follow_redirects` IS FALSE AT THE CLIENT LEVEL. `_fetch_page` walks the
+# chain itself so `detect_platform` can be re-applied to EVERY hop — see
+# `next_hop()`. Callers that are not fetching a user-supplied URL (the caption
+# downloads below, whose URLs come from yt-dlp's answer for an already-validated
+# link) pass `follow_redirects=True` per request, which httpx allows.
 _http = httpx.Client(
-    follow_redirects=True,
+    follow_redirects=False,
     max_redirects=3,
     timeout=8.0,
     proxy=_PROXY,
@@ -389,7 +394,10 @@ def _get_captions(info: dict) -> tuple[str, list[float]]:
         if not vtt_url:
             continue
         try:
-            resp = _http.get(vtt_url, timeout=_CAPTION_TIMEOUT, headers=_BROWSER_HEADERS)
+            # follow_redirects: the URL is yt-dlp's own caption link for an
+            # already-validated video, and YouTube's timedtext host redirects.
+            resp = _http.get(vtt_url, timeout=_CAPTION_TIMEOUT, headers=_BROWSER_HEADERS,
+                             follow_redirects=True)
         except Exception:
             continue
         # YouTube rate-limits the timedtext endpoint per-IP. Once we hit 429 every
@@ -463,6 +471,7 @@ def _youtube_oembed(url: str) -> dict:
             params={"url": url, "format": "json"},
             headers=_BROWSER_HEADERS,
             timeout=8,
+            follow_redirects=True,   # fixed host; not a user-supplied URL
         )
         if resp.status_code == 200:
             d = resp.json()
@@ -598,7 +607,7 @@ def facebook_oembed(url: str) -> dict:
         r = _http.get(
             "https://graph.facebook.com/v25.0/oembed_video",
             params={"url": canonical, "maxwidth": 640},
-            headers=_HONEST_UA, timeout=12,
+            headers=_HONEST_UA, timeout=12, follow_redirects=True,
         )
         if r.status_code != 200:
             return {}
@@ -613,6 +622,58 @@ def facebook_oembed(url: str) -> dict:
         "uploader": (data.get("author_name") or "").strip(),
         "image": "",   # oembed_video carries no thumbnail; the page fallback may.
     }
+
+
+_REDIRECT_CODES = (301, 302, 303, 307, 308)
+_MAX_PAGE_REDIRECTS = 3
+
+
+def next_hop(current: str, location: str) -> Optional[str]:
+    """Resolve a `Location` header against the URL it came from, and return it
+    ONLY if it is still a platform link.
+
+    ⚠️ THIS IS THE SECOND HALF OF THE SSRF FIX (2026-09-23). Validating the URL
+    a user submits is worthless if the fetcher then chases a redirect anywhere:
+    an open redirect on a platform host — and every large platform has had one —
+    turns `https://www.facebook.com/…?next=http://169.254.169.254/` back into a
+    request to the metadata endpoint, made by our server, with the answer parsed
+    and handed back on a card. httpx applies no host policy of its own, so
+    `follow_redirects=True` meant exactly that.
+
+    The same reasoning, and the same shape of fix, as the thumbnail proxy in
+    `app/main.py` — which had this closed first, and is where the pattern comes
+    from.
+
+    Returns None for: no Location, an unparseable one, or a hop that leaves the
+    platform allowlist. The caller treats None as "this page could not be read",
+    which is already a state it handles.
+    """
+    if not location:
+        return None
+    try:
+        nxt = str(httpx.URL(current).join(location))
+    except Exception:
+        return None
+    return nxt if detect_platform(nxt) != "unknown" else None
+
+
+def _get_within_allowlist(url: str, headers: dict) -> Optional[httpx.Response]:
+    """GET, following at most `_MAX_PAGE_REDIRECTS` hops, every one re-checked.
+
+    Redirects are NORMAL here and cannot simply be refused: `lnkd.in` is the only
+    URL the LinkedIn app ever shares, `youtu.be` and `fb.watch` are shorteners,
+    and `threads.net` redirects to `threads.com`. All of those land back inside
+    the allowlist, which is exactly the distinction this draws.
+    """
+    for _ in range(_MAX_PAGE_REDIRECTS + 1):
+        resp = _http.get(url, headers=headers)
+        if resp.status_code not in _REDIRECT_CODES:
+            return resp
+        url = next_hop(url, resp.headers.get("location") or "")
+        if url is None:
+            logger.warning("[FETCH] refused a redirect off the platform allowlist")
+            return None
+    return None   # too many hops
 
 
 def _fetch_page(url: str) -> Optional[str]:
@@ -636,7 +697,9 @@ def _fetch_page(url: str) -> Optional[str]:
         time.sleep(random.uniform(0.15, 0.6))
         for ident in _IDENTITIES:
             try:
-                resp = _http.get(url, headers=ident)
+                resp = _get_within_allowlist(url, ident)
+                if resp is None:
+                    return None   # refused hop or too many — not a transport failure
             except Exception as e:
                 last_err = e
                 transport_failures += 1
@@ -771,7 +834,7 @@ def _youtube_data_api(url: str) -> dict:
         r = _http.get(
             "https://www.googleapis.com/youtube/v3/videos",
             params={"id": vid, "part": "snippet", "key": settings.YOUTUBE_API_KEY},
-            timeout=8,
+            timeout=8, follow_redirects=True,
         )
         if r.status_code == 403:
             # Almost always quotaExceeded / key restriction. Log loudly: this is
@@ -813,6 +876,16 @@ def _youtube_attempts() -> list[dict]:
 
 
 def _run_ydl(url: str, opts: dict) -> Optional[dict]:
+    # ⚠️ RESIDUAL SSRF SURFACE, KNOWN AND ACCEPTED (2026-09-23). `url` is
+    # host-validated by `detect_platform` before anything calls this, and
+    # `_fetch_page` re-checks every redirect hop — but yt-dlp does its own
+    # networking, and there is no host policy we can hook into. A live open
+    # redirect on YouTube/Instagram/TikTok/Facebook could therefore still send
+    # yt-dlp somewhere internal. Narrow (it needs such a redirect to exist, and
+    # the answer is parsed as media rather than returned as page text) but not
+    # zero. Fixing it properly means egress through an allowlisting proxy.
+    # Tracked in TODO.md → "Pre-launch security pass".
+    #
     # process=False returns the raw extractor output (metadata + caption tracks)
     # WITHOUT running format selection — which we don't need and which is the slow,
     # failure-prone step ("Requested format is not available").
