@@ -5,10 +5,10 @@ Pod::Spec.new do |s|
   s.description    = 'Local Expo module. See mobile/modules/share-config/ios/ShareConfigModule.swift.'
   s.license        = 'UNLICENSED'
   s.author         = 'Findable'
-  s.homepage       = 'https://github.com/LeoPrasanna/savehere'
+  s.homepage       = 'https://github.com/LeoPrasanna/findable'
   s.platform       = :ios, '15.1'
   s.swift_version  = '5.0'
-  s.source         = { git: 'https://github.com/LeoPrasanna/savehere' }
+  s.source         = { git: 'https://github.com/LeoPrasanna/findable' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   addNote, markRead, markAllRead, removeNote, unreadCount, parseNotes, ago,
-  MAX_NOTES, type Note,
+  orderReceipts, MAX_NOTES, type Note,
 } from './notifyLog.ts';
 
 /**
@@ -96,5 +96,31 @@ assert.equal(ago(T - 86_400_000, T), 'Yesterday');
 assert.equal(ago(T - 3 * 86_400_000, T), '3d ago');
 // Clock skew (device time moved backwards) must not print "-2m ago".
 assert.equal(ago(T + 120_000, T), 'Just now', 'a future timestamp clamps');
+
+// ── orderReceipts: the iOS Share Extension's queue ──────────────────────────
+// ⚠️ OLDEST FIRST. The drawer renders newest-first and addNote prepends, so
+// arrival order would put a batch of shares in upside down.
+assert.deepEqual(
+  orderReceipts([
+    { title: 'Saving from Threads', body: 'c', at: 300 },
+    { title: 'Saving from Instagram', body: 'a', at: 100 },
+    { title: 'Saving from YouTube', body: 'b', at: 200 },
+  ]).map(r => r.at),
+  [100, 200, 300],
+);
+
+// Written by another PROCESS, so it is validated rather than trusted: a receipt
+// from a future version of the Swift must not take the drawer down with it.
+assert.deepEqual(orderReceipts([{ body: 'no title', at: 1 }]), []);
+assert.deepEqual(orderReceipts([null, undefined, 4, 'x']), []);
+assert.deepEqual(orderReceipts(null), []);
+assert.deepEqual(orderReceipts('[]'), []);
+
+// A missing body or timestamp is survivable; `at: 0` is what tells
+// drainShareReceipts to fall back to "now".
+const partial = orderReceipts([{ title: 'Saving from the web' }]);
+assert.equal(partial.length, 1);
+assert.equal(partial[0].body, '');
+assert.equal(partial[0].at, 0);
 
 console.log('notifyLog: all assertions passed');

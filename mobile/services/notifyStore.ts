@@ -41,8 +41,12 @@ export async function loadNotes(): Promise<Note[]> {
  * know the save happened, and for someone who declined notifications this list
  * is the *only* place they will ever see it.
  */
-export async function recordNote(title: string, body: string): Promise<void> {
-  const at = Date.now();
+export async function recordNote(title: string, body: string, when?: number): Promise<void> {
+  // `when` exists for receipts that were WRITTEN EARLIER by another process —
+  // the iOS Share Extension leaves them in the App Group and the app drains
+  // them on its next foreground, which can be hours later. Stamping those with
+  // Date.now() would tell the user a save from this morning happened just now.
+  const at = when ?? Date.now();
   await write(addNote(await loadNotes(), {
     id: `${at}-${Math.random().toString(36).slice(2, 8)}`,
     title,

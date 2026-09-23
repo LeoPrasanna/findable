@@ -289,7 +289,7 @@ class ShareSaveService : Service() {
             val body = if (ok)
                 "Your summary is being written — it will be ready in your library."
             else
-                "Open SaveHere and paste it to try again."
+                "Open Findable and paste it to try again."
 
             // Recorded before it is posted, and recorded even if posting is
             // refused: a user who declined notifications still needs one place
@@ -311,7 +311,7 @@ class ShareSaveService : Service() {
     }
 
     private fun promote() {
-        val note = buildNotification(this, "Saving to SaveHere", "Sending the link…", true)
+        val note = buildNotification(this, "Saving to Findable", "Sending the link…", true)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(ONGOING_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -360,6 +360,14 @@ internal fun platformLabel(url: String): String {
         u.contains("instagram.com") -> "Instagram"
         u.contains("facebook.com") || u.contains("fb.watch") || u.contains("fb.com") -> "Facebook"
         u.contains("tiktok.com") -> "TikTok"
+        // ⚠️ THIS LIST DRIFTED ONCE ALREADY. Threads shipped on 2026-09-17 in
+        // the backend and in shareSave.ts, but not here — a Kotlin string can
+        // only change in a BUILD, so a JS-only round physically cannot update
+        // it, and the mirror silently fell behind. A Threads share notified
+        // "Saved from the web" for a week. When a platform is added, this is
+        // the copy that has to wait for the next native build; put it on the
+        // build's checklist rather than assuming the OTA carried it.
+        u.contains("threads.net") || u.contains("threads.com") -> "Threads"
         u.contains("linkedin.com") -> "LinkedIn"
         else -> "the web"
     }

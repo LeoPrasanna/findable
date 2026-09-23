@@ -19,6 +19,7 @@ import { TabBar } from '../components/TabBar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { retryShareKeyIfNeeded } from '../services/shareKey';
+import { drainShareReceipts } from '../services/shareReceipts';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { WelcomeBack } from '../components/WelcomeBack';
 import { onUi, emitUi, useDismissOnBackground } from '../services/uiBus';
@@ -283,6 +284,15 @@ function Gate() {
       // used to fail silently and never try again, so the share fell back to
       // opening the app for the rest of the session. A no-op once armed.
       if (session) retryShareKeyIfNeeded();
+      // ⚠️ AND COLLECT WHAT THE iOS SHARE EXTENSION LEFT. Resuming is the FIRST
+      // moment the app can see a save made from inside another app — the
+      // extension writes its receipt to the App Group and dies. No-op on
+      // Android, where the share Activity writes the drawer row itself.
+      // No event needed: NotificationCentre re-reads storage every time the
+      // panel opens, and uiBus's own note says the next event is the signal to
+      // reach for something real. A fifth zero-arg name for a list that already
+      // refreshes itself is not that.
+      drainShareReceipts();
     });
     // ⚠️ Optional call, not `sub.remove()`. react-native-web's AppState returns
     // UNDEFINED when `document.visibilityState` is unavailable (static render,

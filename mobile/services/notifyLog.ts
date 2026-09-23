@@ -99,3 +99,35 @@ export function ago(at: number, now: number = Date.now()): string {
   const days = Math.floor(hours / 24);
   return days === 1 ? 'Yesterday' : `${days}d ago`;
 }
+
+export interface Receipt { title: string; body: string; at: number }
+
+/**
+ * The iOS Share Extension's receipts, oldest first and only the usable ones.
+ *
+ * ⚠️ ORDER MATTERS AND IT IS BACKWARDS FROM THE DISPLAY. The drawer renders
+ * newest-first and `addNote` PREPENDS, so replaying oldest-first is what leaves
+ * a batch of shares the right way up. Replaying in arrival order inverts them.
+ *
+ * ⚠️ IT LIVES HERE, NOT IN services/shareReceipts.ts, for one practical reason:
+ * this file imports nothing, so it can be exercised by `node
+ * --experimental-strip-types`. shareReceipts.ts imports the native module, and
+ * a test that pulls that in cannot run outside a device. Pure list arithmetic
+ * belongs in the pure half — which is what this file was already for.
+ *
+ * The input is whatever JSON the extension wrote, so it is typed `unknown` and
+ * validated rather than trusted: a receipt written by a future version of the
+ * Swift must never take the drawer down with it.
+ */
+export function orderReceipts(raw: unknown): Receipt[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r): r is Receipt =>
+      !!r && typeof (r as Receipt).title === 'string' && !!(r as Receipt).title)
+    .map(r => ({
+      title: r.title,
+      body: typeof r.body === 'string' ? r.body : '',
+      at: typeof r.at === 'number' ? r.at : 0,
+    }))
+    .sort((a, b) => a.at - b.at);
+}
