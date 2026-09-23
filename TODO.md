@@ -83,6 +83,18 @@ because a pause is reversible. A deletion would not have been.
     screen misconfigured, client secret rotated, project suspended — every Android user
     is locked out with no fallback and no password reset to fall back on. Watch item, not
     a task; the mitigation if it ever bites is a magic-link, which needs the SMTP above.
+- [ ] 🔴 👤 **Decide the extraction egress question BEFORE prod goes live** (owner,
+  2026-09-23: "keep this as important task before production live"). SSRF on the save
+  path is closed both ways in code — host matching on the submitted URL, and every
+  redirect hop re-checked — but **yt-dlp does its own networking with no host policy we
+  can hook**, so an open redirect on a major platform could still send it at an internal
+  address. Today that reaches nothing (one Render service, no private network, no
+  internal-only endpoints, Supabase on the public internet behind a credential), which is
+  why it is not fixed yet. **This item is the checkpoint, not the work:** at the prod
+  cutover, answer "what can our server reach that the public cannot?" — if the answer is
+  still "nothing", write that down and move on; if prod adds a second service, a private
+  network or a cache, the egress allowlist ships with it. Full reasoning under
+  "Pre-launch security pass" below.
 - [ ] 🔴 👤 **Apply `backend/scripts/enable_rls.sql` to the PROD Supabase project**
   (ref `lukmwwcilrjqqtgqbynq`) **on the day you point the app at prod** (owner,
   2026-09-13: everything is on dev today, so this waits for the move). Needs prod
