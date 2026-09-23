@@ -65,18 +65,18 @@ because a pause is reversible. A deletion would not have been.
     and both `supabase.auth.signInWithPassword` / `signUp` calls. The screen is now one
     step: Apple (iOS) and Google. The "legacy … being retired" sentence is gone from
     `site/privacy.html` §2 in the same commit, so the policy and the app agree again.
-  - [ ] 🔴 👤 **Switch the Email provider OFF in Supabase Auth → Providers — BOTH projects**
-    (dev `ymclmbmmwtczspnmccsy`, prod `lukmwwcilrjqqtgqbynq`). Deleting the UI does not
-    close the endpoint: `/auth/v1/signup` still accepts an email and password, and every
-    account it mints is one this app has no screen to sign into. Until this is off, the
-    Privacy Policy's "You sign in with Google or Apple" is true of the app and false of
-    the service behind it.
-  - [ ] 👤 **The 3 dev test accounts sign in with email and password — they are now
-    stranded** on any device running this build. Re-create them through Google (a Gmail
-    alias like `you+test1@gmail.com` works and costs nothing), or reach their data
-    through the Supabase dashboard. ⚠️ Signing in with Google using the SAME address does
-    NOT recover the old account unless Supabase is configured to link identities by
-    email — it creates a second, empty user row.
+  - [x] 👤 **Email provider switched OFF in Supabase Auth → Providers** (owner,
+    2026-09-23). This is what makes the removal real: `/auth/v1/signup` no longer accepts
+    an email and password, so the service can no longer mint accounts the app has no
+    screen to sign into, and the Privacy Policy's "You sign in with Google or Apple" is
+    now true of the service as well as the app. ⚠️ **Re-check it on the prod project
+    (`lukmwwcilrjqqtgqbynq`) at the move** — provider settings are per-project, and a
+    fresh project ships with Email ON by default.
+  - [x] **The 3 dev test accounts are stranded, and that is accepted** (owner,
+    2026-09-23: "test accounts don't matter"). They signed in with a password; no screen
+    takes one now. If staging logins are ever needed again, make them through Google with
+    a `you+test1@gmail.com` alias — ⚠️ signing in with the SAME address as an old
+    password account does NOT recover it, it creates a second, empty user row.
   - ⚠️ **The cost of Google/Apple-only — now REAL, not hypothetical** (shipped
     2026-09-23): on Android there is exactly ONE door. Apple sign-in is iOS-only (it needs
     the native `expo-apple-authentication` flow), so if Google OAuth breaks — consent
