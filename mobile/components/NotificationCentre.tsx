@@ -5,6 +5,7 @@ import { Icon } from './Icon';
 import { Body, Index, Label, Rule, TextAction } from './kit';
 import { ago, markRead, markAllRead, removeNote, unreadCount, type Note } from '../services/notifyLog';
 import { deleteNote, loadNotes, markAllNotesRead, markNoteRead } from '../services/notifyStore';
+import { reelPath } from '../services/deepLink';
 import { colors, font, spacing, themed } from '../constants/theme';
 
 /**
@@ -20,8 +21,16 @@ import { colors, font, spacing, themed } from '../constants/theme';
  * same pure function, so the drawer never shows a state the store disagrees
  * with. The writes are fire-and-forget: a failed one costs a read mark, and
  * blocking the UI on AsyncStorage for that would be a worse trade.
+ *
+ * `onOpen` is the panel's own "close, then navigate" — the panel owns its
+ * dismissal, and a drawer row that pushed a route while leaving the panel
+ * covering it would land the user on a screen they cannot see. Rows for a
+ * receipt with no reel (a FAILED save, or anything posted before `reelId`
+ * existed) simply do not call it.
  */
-export function NotificationCentre({ visible }: { visible: boolean }) {
+export function NotificationCentre({
+  visible, onOpen,
+}: { visible: boolean; onOpen?: (path: string) => void }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -36,9 +45,14 @@ export function NotificationCentre({ visible }: { visible: boolean }) {
   const unread = unreadCount(notes);
 
   const onRowPress = (n: Note) => {
-    if (n.read) return;
-    setNotes(list => markRead(list, n.id));
-    markNoteRead(n.id);
+    if (!n.read) {
+      setNotes(list => markRead(list, n.id));
+      markNoteRead(n.id);
+    }
+    // The receipt exists to lead back to the thing it is about. A row the user
+    // has already read still opens it — marking read is bookkeeping, not the
+    // reason they tapped.
+    if (n.reelId && onOpen) onOpen(reelPath(n.reelId));
   };
 
   const onDelete = (n: Note) => {
@@ -97,7 +111,10 @@ export function NotificationCentre({ visible }: { visible: boolean }) {
               <Pressable
                 onPress={() => onRowPress(n)}
                 style={styles.rowBody}
-                accessibilityLabel={`${n.title}${n.read ? '' : ', unread'}`}
+                accessibilityLabel={
+                  `${n.title}${n.read ? '' : ', unread'}`
+                  + (n.reelId ? ', opens the saved link' : '')
+                }
               >
                 <View style={styles.rowHead}>
                   <Index n={i + 1} />
@@ -124,7 +141,7 @@ export function NotificationCentre({ visible }: { visible: boolean }) {
             // the user shares something into the app, and an empty list with no
             // explanation reads as broken.
             ? 'Saves you make from another app’s share sheet report here.'
-            : 'Tap to read, dismiss, or clear them.'}
+            : 'Tap one to open the save, or clear it.'}
         </Body>
       )}
       <Rule style={{ marginTop: spacing.md }} />

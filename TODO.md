@@ -384,8 +384,18 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
 
 ## Features — open
 
-- [ ] **Deep linking** — `savehere://reel/{id}` so a share-extension save opens the
-  detail screen directly.
+- [x] **Deep linking** — shipped 2026-09-23, but **NOT as this item described it.**
+  The old wording ("so a share-extension save opens the detail screen directly")
+  predated the invisible share and contradicted it: the owner ruled on 2026-08-12 that
+  a share must leave you in the app you shared from, verified on device 2026-09-13.
+  So the route is addressable (`savehere://reel/<id>`) and the **notification** is the
+  door — tapping "Saved from Instagram", or its row in the drawer, opens that reel.
+  Nothing auto-opens. ⚠️ **Do not re-file this as "make the share open the reel".**
+  Full reasoning and four traps in [`docs/SHIPPED.md`](docs/SHIPPED.md).
+  - [ ] **Nothing PRODUCES a `savehere://reel/<id>` link yet.** The route works and is
+    validated; no screen, page or message emits one. A "share this save" action or a
+    web page linking into the app is the obvious next user of it — worth doing only
+    when there is a reason to hand someone a link, not before.
 - [ ] **To-do reminders** — local notification the evening before / morning of a due date.
 - [ ] **Archive as a softer alternative to delete-on-completion.**
 - [ ] **Activity grid + streak.** `todos.completed_at` is already recorded, so the data
@@ -519,6 +529,20 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   brand glyph against
   `node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Ionicons.json`
   before shipping it — the failure is invisible until someone opens a real card.
+- ⚠️ **`useLastNotificationResponse()` THROWS ON WEB** — it calls
+  `getLastNotificationResponse()` from a layout effect, and on web that resolves to
+  expo-notifications' stub emitter module, which has no such method and raises
+  `UnavailabilityError` at the ROOT of the tree, on mount. A hook cannot be called
+  conditionally, so `NotificationTapHandler` in `app/_layout.tsx` is mounted behind
+  `Platform.OS !== 'web'` as a whole COMPONENT. Third member of the same family as the
+  two entries below.
+- ⚠️ **`savehere://reel/123` has NO authority — `reel` is the first PATH segment.**
+  `new URL()`, or any `//host` strip, eats it and leaves `/123`. expo-router reads the
+  whole remainder after the scheme as a path, which is why an iOS share doorbell
+  arrived as a route called `dataUrl=savehereShareKey`. `services/deepLink.ts` matches
+  that reading on purpose and `deepLink.test.ts` pins it. ⚠️ Whatever it does not
+  recognise must fall through untouched — `savehere://auth/callback` is the OAuth
+  redirect, and on Android Google is the only door into the app.
 - ⚠️ **`Updates.isEnabled` is hardcoded `true` in the expo-updates WEB shim.** Any
   updates check must guard `Platform.OS !== 'web'` as well. And `reloadAsync()` never
   resolves on success (the JS context is torn down) — never schedule work after it.

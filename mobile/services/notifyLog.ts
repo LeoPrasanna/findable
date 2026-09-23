@@ -21,6 +21,17 @@ export interface Note {
   /** Epoch ms. */
   at: number;
   read: boolean;
+  /**
+   * The saved reel this receipt is about, when there is one — it makes the row
+   * (and the OS notification) a door to the thing that was just saved.
+   *
+   * ⚠️ OPTIONAL, AND PERMANENTLY SO. Every receipt written before this field
+   * existed is still in the store, a failed save has no reel to point at, and
+   * Android Phase B's Kotlin Activity appends here from outside the JS runtime.
+   * All three are normal, and all three must render as a plain, un-tappable
+   * row rather than as a link to nothing.
+   */
+  reelId?: string;
 }
 
 /** A receipt drawer, not an inbox — the library is the durable record. */
@@ -77,13 +88,19 @@ export function parseNotes(raw: string | null): Note[] {
     const r = row as Record<string, unknown>;
     const at = Number(r.at);
     if (typeof r.id !== 'string' || !r.id || !Number.isFinite(at)) continue;
-    out.push({
+    const note: Note = {
       id: r.id,
       title: typeof r.title === 'string' ? r.title : '',
       body: typeof r.body === 'string' ? r.body : '',
       at,
       read: r.read === true,
-    });
+    };
+    // Assigned only when it is really there, so a row that has no reel keeps
+    // the exact shape it had before this field existed — `reelId: undefined`
+    // would survive a round-trip through the store as a missing key anyway,
+    // but the drawer reads the object, not the JSON.
+    if (typeof r.reelId === 'string' && r.reelId) note.reelId = r.reelId;
+    out.push(note);
   }
   return out.slice(0, MAX_NOTES);
 }

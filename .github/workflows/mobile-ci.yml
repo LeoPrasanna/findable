@@ -72,3 +72,4 @@ jobs:
           node --experimental-strip-types --no-warnings services/readFailure.test.ts
           node --experimental-strip-types --no-warnings components/tabBarSize.test.ts
           node --experimental-strip-types --no-warnings services/saveQuota.test.ts
+          node --experimental-strip-types --no-warnings services/deepLink.test.ts

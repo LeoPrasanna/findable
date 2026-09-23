@@ -41,7 +41,11 @@ export async function loadNotes(): Promise<Note[]> {
  * know the save happened, and for someone who declined notifications this list
  * is the *only* place they will ever see it.
  */
-export async function recordNote(title: string, body: string): Promise<void> {
+export async function recordNote(
+  title: string,
+  body: string,
+  reelId?: string,
+): Promise<void> {
   const at = Date.now();
   await write(addNote(await loadNotes(), {
     id: `${at}-${Math.random().toString(36).slice(2, 8)}`,
@@ -49,6 +53,9 @@ export async function recordNote(title: string, body: string): Promise<void> {
     body,
     at,
     read: false,
+    // A failed save has no reel to point at, so the key is simply absent —
+    // see the note on `Note.reelId`.
+    ...(reelId ? { reelId } : {}),
   }));
 }
 

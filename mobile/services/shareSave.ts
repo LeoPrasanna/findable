@@ -93,7 +93,20 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function notify(title: string, body: string) {
+/**
+ * `reelId` is what makes the receipt a door rather than a statement.
+ *
+ * ⚠️ It rides in `data`, NOT in the body text. A notification whose only
+ * pointer to the save is a sentence is a dead end — the user reads "Saved from
+ * Instagram", taps it, and lands on Home with no way back to the thing they
+ * just kept. The tap is handled in `app/_layout.tsx`; parsing and validating
+ * the payload is `services/deepLink.ts`.
+ *
+ * A FAILED save passes nothing, because there is no reel. That is not an
+ * oversight to tidy up later: a failure notification that opened a detail
+ * screen would be opening a card that does not exist.
+ */
+async function notify(title: string, body: string, reelId?: string) {
   /**
    * ⚠️ RECORDED BEFORE THE PERMISSION CHECK, AND BEFORE THE POST.
    *
@@ -104,11 +117,11 @@ async function notify(title: string, body: string) {
    * saved (or that one failed). Gating the record on the same permission would
    * hide the receipt from exactly the people who have nothing else.
    */
-  await recordNote(title, body);
+  await recordNote(title, body, reelId);
   if (!(await canNotify())) return;
   try {
     await Notifications.scheduleNotificationAsync({
-      content: { title, body },
+      content: { title, body, ...(reelId ? { data: { reelId } } : {}) },
       trigger: null,   // immediately
     });
   } catch {
@@ -176,6 +189,7 @@ export async function saveSharedLink(url: string): Promise<boolean> {
     await notify(
       `Saved from ${where}`,
       'Your summary is being written — it will be ready in your library.',
+      reel.id,
     );
     return true;
   } catch (e: any) {

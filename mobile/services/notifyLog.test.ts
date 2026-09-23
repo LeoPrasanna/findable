@@ -85,6 +85,34 @@ assert.equal(
   'a foreign writer that ignored the cap is trimmed on read',
 );
 
+/* ── reelId: the row is a door, when there is somewhere to go ─────────────── */
+
+// Present and a string — the drawer row opens that save.
+assert.equal(
+  parseNotes(JSON.stringify([{ id: 'a', at: 1, reelId: 'r-1' }]))[0].reelId,
+  'r-1',
+);
+// ⚠️ The three normal ways it is ABSENT, all of which must render a plain row
+// rather than a link to nothing: a receipt written before the field existed, a
+// FAILED save (no reel to point at), and a payload from Kotlin that did not
+// bother. The key must be MISSING, not `undefined` — `deepEqual` is strict
+// about own properties, which is what pins it.
+assert.deepEqual(
+  parseNotes(JSON.stringify([{ id: 'a', at: 1 }]))[0],
+  { id: 'a', title: '', body: '', at: 1, read: false },
+  'no reelId means no key at all',
+);
+assert.deepEqual(
+  parseNotes(JSON.stringify([{ id: 'a', at: 1, reelId: 42 }]))[0],
+  { id: 'a', title: '', body: '', at: 1, read: false },
+  'a non-string reelId is dropped, not carried through',
+);
+assert.deepEqual(
+  parseNotes(JSON.stringify([{ id: 'a', at: 1, reelId: '' }]))[0],
+  { id: 'a', title: '', body: '', at: 1, read: false },
+  'an empty reelId is the same as none',
+);
+
 /* ── relative time ────────────────────────────────────────────────────────── */
 
 const T = 1_000_000_000_000;

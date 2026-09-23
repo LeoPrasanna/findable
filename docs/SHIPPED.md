@@ -21,6 +21,81 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ DEEP LINKING (2026-09-23) — `savehere://reel/<id>`, and the save receipt became a door
+
+**The TODO item's stated reason was obsolete and was NOT implemented.** It read
+"so a share-extension save opens the detail screen directly" — written before
+the invisible share existed. Opening the detail screen on a share is precisely
+what the owner ruled out on 2026-08-12 ("a share is an interruption of something
+else") and verified working on device on 2026-09-13: you share from Instagram,
+you stay in Instagram. Building the item as written would have undone the
+feature it was meant to decorate.
+
+**What shipped instead:** the notification is the door, and the user decides
+whether to walk through it. `saveSharedLink` already posted "Saved from
+Instagram" and already knew the reel's id — it just threw it away. Tapping that
+notification opened Findable on Home, which is a dead end: the one card you
+wanted is somewhere in a masonry grid. Now the id rides in the notification's
+`data`, the tap opens that reel, and the same id is stored on the drawer
+receipt in `NotificationCentre` so a swiped-away banner is not the only chance
+to use it.
+
+Three entry points, one route:
+- `savehere://reel/<id>` from outside the app (no producer yet — this is the
+  addressable route the other two are built on, and what a future "share this
+  save" or an emailed link would use).
+- A tapped OS notification (`app/_layout.tsx` → `NotificationTapHandler`).
+- A tapped row in the notification drawer (`components/NotificationCentre.tsx`).
+
+Parsing and validation are pure and tested in `services/deepLink.ts` /
+`deepLink.test.ts`, run in `mobile-ci.yml` — **not** as an npm script, because
+`@expo/fingerprint` hashes package.json's `scripts` block (see the OTA trap
+below, 2026-08-15).
+
+**⚠️ Four things that cost thought and would cost it again:**
+
+1. **`savehere://reel/123` HAS NO AUTHORITY.** `reel` is the first *path*
+   segment, not a host. `new URL()` — or any `//host` strip — eats it and
+   leaves `/123`, which parses as one segment and matches nothing. expo-router
+   reads the whole remainder as a path, which is exactly why an iOS share
+   doorbell arrived as a route called `dataUrl=savehereShareKey` rather than as
+   a host (`app/+native-intent.ts`, 2026-09-09). The parser matches that
+   reading deliberately, and `deepLink.test.ts` pins it.
+
+2. **`useLastNotificationResponse()` THROWS ON WEB.** It calls
+   `getLastNotificationResponse()` in a layout effect; on web that resolves to
+   expo-notifications' stub emitter module, which has no such method and raises
+   `UnavailabilityError` — at the root of the tree, on mount. A hook cannot be
+   called conditionally, so `NotificationTapHandler` is mounted behind
+   `Platform.OS !== 'web'` as a whole COMPONENT. Same family as the
+   `sub?.remove()` AppState guard and the `Updates.isEnabled` web shim.
+
+3. **The dedup sets are module-level, not refs.** Switching the colour scheme
+   bumps `schemeEpoch`, which remounts the whole subtree, while
+   `getInitialURL()` still returns the launch URL and the notification hook
+   still returns the launch tap. With a ref, changing to dark mode would have
+   thrown the user back onto a reel they had already left.
+
+4. **The handlers live inside the signed-in branch**, like `ShareIntentHandler`
+   — `AppStack` does not exist while the login gate is up, so a push issued
+   then goes nowhere. On a cold start that is the NORMAL case: AuthProvider
+   restores the session asynchronously, so every deep-link launch spends its
+   first frames on the spinner. Known gap, accepted: a link arriving while the
+   login screen is up *and stays up* is missed, and degrades to "the app comes
+   to the front".
+
+**A deep link is untrusted input.** Any app on the device can fire
+`savehere://…` at us, so the id is validated (`[A-Za-z0-9_-]{1,64}`, decoded
+first) before it reaches the router — `savehere://reel/..%2F..%2Fpro` is a
+navigation nobody asked for. And everything the parser does not recognise falls
+through untouched, because `savehere://auth/callback` is the OAuth redirect and
+on Android Google is the only door into the app.
+
+**Fingerprint verified unchanged** (`e647093a…` before and after), so this ships
+over the air and costs no EAS build.
+
+---
+
 ## ▶ OWNER ROUND (2026-09-17) — 6 items: two screens, Threads, shopping, OTA banner
 
 All six shipped together. The reasoning that outlives the diff:

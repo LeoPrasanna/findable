@@ -1,11 +1,12 @@
 import * as Sentry from '@sentry/react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Stack } from 'expo-router/stack';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet, Platform, BackHandler, AppState } from 'react-native';
+import { View, StyleSheet, Platform, BackHandler, AppState, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold,
@@ -19,6 +20,7 @@ import { TabBar } from '../components/TabBar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { retryShareKeyIfNeeded } from '../services/shareKey';
+import { reelIdFromUrl, reelIdFromNotificationData, reelPath } from '../services/deepLink';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { WelcomeBack } from '../components/WelcomeBack';
 import { onUi, emitUi, useDismissOnBackground } from '../services/uiBus';
@@ -232,6 +234,150 @@ function ShareIntentHandler() {
   );
 }
 
+/**
+ * ⚠️ EVERY LINK AND EVERY TAP IS HANDLED AT MOST ONCE PER PROCESS — and these
+ * sets are MODULE-level, not refs.
+ *
+ * Changing the colour scheme bumps `schemeEpoch`, which remounts this entire
+ * subtree. A ref would come back empty while `getInitialURL()` still returns
+ * the launch URL and `useLastNotificationResponse()` still returns the tap
+ * that started the app — so switching to dark mode would throw the user back
+ * onto a reel they had already navigated away from. Module scope outlives the
+ * remount, which is exactly the lifetime this guard needs.
+ */
+const handledLinks = new Set<string>();
+const handledTaps = new Set<string>();
+
+/**
+ * Open a saved reel, unless we are already standing on it.
+ *
+ * The guard matters because the router may have routed there itself:
+ * expo-router consumes the launch URL through its own linking config, and the
+ * handlers below also replay it (they have to — see DeepLinkHandler). Without
+ * this, both fire and the detail screen is pushed twice, so the back gesture
+ * needs two goes to leave one screen.
+ *
+ * `reelIdFromUrl` reads `usePathname()`'s output as happily as it reads a
+ * `savehere://` URL, so "where the link points" and "where we are" compare
+ * through one function rather than two spellings that can drift.
+ */
+function openReel(
+  router: ReturnType<typeof useRouter>,
+  here: string,
+  id: string,
+) {
+  if (reelIdFromUrl(here) === id) return;
+  router.push(reelPath(id) as any);
+}
+
+/**
+ * DEEP LINKS — `savehere://reel/<id>` opens that saved card.
+ *
+ * ⚠️ MOUNTED INSIDE THE SIGNED-IN BRANCH, like ShareIntentHandler and for the
+ * same reason: `AppStack` does not exist while the login gate is up, so a push
+ * issued then goes nowhere. On a cold start that is the NORMAL case rather
+ * than an edge one — AuthProvider restores the session asynchronously, so
+ * every deep-link launch spends its first frames on the spinner. Reading
+ * `getInitialURL()` here, once there is somewhere to send the user, is what
+ * replays the link instead of losing it.
+ *
+ * ⚠️ The gap this leaves, knowingly: a link arriving while the LOGIN screen is
+ * up and stays up is missed — nothing is mounted to hear the `url` event, and
+ * `getInitialURL()` only ever reports the launch. It degrades to "the app
+ * comes to the front", which is what tapping the icon does anyway.
+ *
+ * Everything this does NOT recognise is left alone, and that is load-bearing:
+ * `savehere://auth/callback` is the OAuth redirect for Google and Apple, and
+ * on Android Google is the only door into the app. See `services/deepLink.ts`
+ * and the same contract in `app/+native-intent.ts`.
+ */
+function DeepLinkHandler() {
+  const router = useRouter();
+  const pathname = usePathname();
+  // A ref, not a dependency: `openReel` needs the CURRENT route at call time,
+  // and putting pathname in the deps would tear down and re-register the url
+  // listener on every navigation in the app.
+  const here = useRef(pathname);
+  here.current = pathname;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const handle = (url: string | null | undefined) => {
+      if (cancelled || typeof url !== 'string') return;
+      const id = reelIdFromUrl(url);
+      if (!id || handledLinks.has(url)) return;
+      handledLinks.add(url);
+      openReel(router, here.current, id);
+    };
+
+    // Cold start: the URL the app was launched with. Still set on a launch
+    // that went through the login screen first, which is the point.
+    Linking.getInitialURL().then(handle).catch(() => {});
+    // Warm: a link that arrives while we are already running.
+    const sub = Linking.addEventListener('url', e => handle(e.url));
+    return () => { cancelled = true; sub.remove(); };
+  }, [router]);
+
+  return null;
+}
+
+/**
+ * NOTIFICATION TAPS — the save receipt becomes a door.
+ *
+ * A background share posts "Saved from Instagram" and hands the user straight
+ * back to Instagram. Tapping that notification used to open Findable on Home,
+ * which is a dead end: the one card they wanted is somewhere in a masonry
+ * grid, and the notification knew its id the whole time.
+ * `services/shareSave.ts` now puts that id in the payload; this reads it.
+ *
+ * ⚠️ IT DOES NOT AUTO-OPEN ON A SHARE, and must not. Staying inside the app
+ * you shared FROM is the entire point of the invisible share (owner,
+ * 2026-08-12; verified on device 2026-09-13), so the notification is an
+ * INVITATION, taken only if the user taps it. Anything that opens the detail
+ * screen on its own undoes the feature this one decorates.
+ *
+ * ⚠️ MOUNTED ON NATIVE ONLY, AND NOT VIA A `Platform.OS` CHECK INSIDE THE HOOK.
+ * `useLastNotificationResponse()` calls `getLastNotificationResponse()` from a
+ * layout effect, and on web that resolves to expo-notifications' stub emitter
+ * module, which has no such method and THROWS `UnavailabilityError` — at the
+ * root of the tree, on mount. A hook cannot be called conditionally, so the
+ * COMPONENT is the thing that is conditional. `Platform.OS` never changes
+ * within a process, so this either always mounts or never does.
+ */
+function NotificationTapHandler() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const here = useRef(pathname);
+  here.current = pathname;
+
+  // Covers cold start AND warm: the hook seeds itself from the response that
+  // launched the app, then follows the listener for taps after that.
+  const response = Notifications.useLastNotificationResponse();
+
+  useEffect(() => {
+    if (!response) return;
+    // A tap on the notification body, not on an action button. We register no
+    // actions today, so this is guarding against one added later quietly
+    // inheriting "open the reel".
+    if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+
+    const key = response.notification.request.identifier;
+    if (handledTaps.has(key)) return;
+
+    const id = reelIdFromNotificationData(response.notification.request.content.data);
+    // No id means a receipt posted before this shipped, or a FAILED save,
+    // which has no card to open. Bringing the app to the front is the whole of
+    // the correct behaviour there — and the OS has already done it.
+    if (!id) return;
+
+    handledTaps.add(key);
+    openReel(router, here.current, id);
+  }, [response, router]);
+
+  return null;
+}
+
 // Gate the whole app on auth: spinner during the initial session check, the login
 // screen when signed out, the app once a session exists. LoginScreen doesn't
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
@@ -326,6 +472,11 @@ function Gate() {
           <AppProfilePanel key={`panel-${schemeEpoch}`} />
           {/* Renders nothing — it just routes an incoming share into /save. */}
           <ShareIntentHandler />
+          {/* Nothing either: these two turn an arriving link, or a tapped save
+              receipt, into the reel it points at. Both need AppStack above
+              them to exist, which is why they live inside this branch. */}
+          <DeepLinkHandler />
+          {Platform.OS !== 'web' && <NotificationTapHandler />}
         </>
       ) : (
         <LoginScreen key={`login-${schemeEpoch}`} />
