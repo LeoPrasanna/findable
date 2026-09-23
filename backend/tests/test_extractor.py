@@ -46,6 +46,51 @@ class TestDetectPlatform:
         assert extractor.detect_platform("https://www.threads.net/@a/post/DAbc123") == "threads"
         assert extractor.detect_platform("https://threads.com/@a/post/DAbc123?xmt=z") == "threads"
 
+    def test_platform_name_anywhere_in_the_url_is_not_a_platform(self):
+        """⚠️ SSRF REGRESSION. `detect_platform` is the ONLY synchronous check
+        before /save and /share-save fetch a URL server-side, and it used to
+        substring-match the whole string: anything CONTAINING a platform name
+        passed, wherever it appeared. Each of these was accepted, fetched from
+        the server's own network, and its title and description handed back on a
+        card. Owner-reported, fixed 2026-09-23."""
+        ssrf = [
+            # Cloud metadata, platform name parked in the query string.
+            "http://169.254.169.254/latest/meta-data?q=threads.com",
+            # A private address, platform name in the path.
+            "http://10.0.0.5:8080/instagram.com",
+            "https://evil.example/threads.net/x",
+            # Subdomain trick — the dotted boundary is what stops this.
+            "https://instagram.com.evil.example/x",
+            # userinfo: the host here is evil.example, not threads.com. Parsing
+            # is the only thing that tells them apart.
+            "https://threads.com@evil.example/",
+            "https://user:pw@youtube.com.evil.example/",
+            # Not http(s) — no business reaching a fetcher at all.
+            "file:///etc/passwd?x=youtube.com",
+            "gopher://127.0.0.1:6379/_INFO?youtu.be",
+            # Bare loopback and IPv6 loopback.
+            "http://127.0.0.1:8000/facebook.com",
+            "http://[::1]/tiktok.com",
+        ]
+        for url in ssrf:
+            assert extractor.detect_platform(url) == "unknown", url
+
+    def test_subdomains_and_trailing_dot(self):
+        # The fix must not cost real links: platform subdomains are normal, and
+        # a trailing dot is a legal FQDN that resolves identically — so it must
+        # not be a way to sit just outside the match either.
+        assert extractor.detect_platform("https://m.youtube.com/shorts/x") == "youtube"
+        assert extractor.detect_platform("https://vm.tiktok.com/ZM1/") == "tiktok"
+        assert extractor.detect_platform("https://web.facebook.com/reel/1") == "facebook"
+        assert extractor.detect_platform("http://threads.com./@a/post/1") == "threads"
+        assert extractor.detect_platform("https://WWW.Instagram.COM/reel/x") == "instagram"
+
+    def test_malformed_urls_do_not_raise(self):
+        # A save request carries a user-supplied string; this must fail closed
+        # rather than 500.
+        for url in ["", "not a url", "http://", "http://[::1", "https://:::/x"]:
+            assert extractor.detect_platform(url) == "unknown", url
+
     def test_threads_does_not_shadow_instagram(self):
         # Both are Meta and both can carry an `igshid`; the Instagram branch is
         # checked first and must keep winning for instagram.com URLs.
