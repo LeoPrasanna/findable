@@ -79,28 +79,21 @@ def health():
 _PROBE_URL = "https://www.youtube.com/shorts/SXHMnicI6Pg"
 
 
-# Hosts `?url=` may point at. This endpoint is UNAUTHENTICATED and makes an
-# outbound request on the caller's behalf, so without an allowlist it is a
-# straightforward SSRF gadget — the same reasoning (and the same domain-suffix
-# matching, not substring) as the thumbnail proxy's `_THUMB_HOSTS` below.
-_PROBE_HOSTS = (
-    "youtube.com", "youtu.be", "instagram.com", "facebook.com", "fb.watch",
-    "tiktok.com", "linkedin.com",
-    # Threads runs on both hosts — see detect_platform() for why .net stays.
-    "threads.net", "threads.com",
-    # LinkedIn's own shortener — every link the LinkedIn app shares is one of
-    # these, and the probe is useless for LinkedIn shares without it.
-    "lnkd.in",
-)
-
-
+# ⚠️ THIS ENDPOINT IS UNAUTHENTICATED AND FETCHES `?url=` ON THE CALLER'S
+# BEHALF, so what counts as an allowed host is a security question, not a
+# convenience one.
+#
+# It used to keep its OWN host list (`_PROBE_HOSTS`) alongside its own matcher.
+# The list was right — dotted-suffix matching on the parsed hostname — but it was
+# a SECOND copy of a list that already existed in `detect_platform`, and the two
+# drifted: adding Threads meant editing both, and the save path's copy was the
+# loose substring version that let `http://169.254.169.254/?q=threads.com`
+# through. One list now, in the extractor, where the fetchers read it.
+#
+# "Is this a platform link?" and "may the probe fetch it?" are the same question.
 def _probe_host_allowed(url: str) -> bool:
-    try:
-        host = (urlparse(url).hostname or "").lower()
-    except ValueError:
-        return False
-    # Suffix match on a DOTTED boundary: "youtube.com.evil.example" must not pass.
-    return any(host == h or host.endswith("." + h) for h in _PROBE_HOSTS)
+    from app.services import extractor
+    return extractor.detect_platform(url) != "unknown"
 
 
 @app.get("/health/extract", dependencies=[Depends(rate_limit(10, 60, "health_extract"))])
@@ -132,7 +125,7 @@ def health_extract(live: bool = False, url: str | None = None):
         if not _probe_host_allowed(url):
             raise HTTPException(
                 status_code=400,
-                detail="Probe URL must be a supported platform link (YouTube, Instagram, Facebook, TikTok, LinkedIn).",
+                detail="Probe URL must be a supported platform link (YouTube, Instagram, Facebook, TikTok, Threads, LinkedIn).",
             )
         target = url
 

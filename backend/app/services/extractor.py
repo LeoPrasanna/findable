@@ -191,39 +191,84 @@ def normalize_url(url: str) -> str:
     ))
 
 
+# Hosts that identify a platform. The tuple order is the match order.
+#
+# ⚠️ `lnkd.in` IS THE ONLY URL THE LINKEDIN APP EVER GIVES YOU. Sharing a post
+# from LinkedIn produces https://lnkd.in/p/<id>, never a linkedin.com link — so
+# recognising only "linkedin.com" meant the share path from LinkedIn was
+# rejected 100% of the time with "Couldn't recognize this link", while pasting a
+# desktop URL worked. Owner report, first TestFlight build, 2026-09-09.
+# `_fetch_page` already follows redirects, so naming the platform here is the
+# whole fix.
+#
+# ⚠️ THREADS HAS TWO DOMAINS, BOTH LIVE. It launched on `threads.net` and moved
+# to `threads.com`; the app now shares `threads.com` links, but every link posted
+# before the move — and every one already sitting in someone's notes — is still a
+# `threads.net` URL that redirects. Recognising only the new host would reject
+# half the real-world links, the same bug `lnkd.in` caused for LinkedIn.
+#
+# yt-dlp has no Threads extractor, so Threads never reaches the video path — it
+# lands on the public page-meta fallback at the bottom of `extract_info()`, the
+# same route LinkedIn and Facebook take.
+_PLATFORM_HOSTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("instagram", ("instagram.com",)),
+    ("youtube",   ("youtube.com", "youtu.be")),
+    ("tiktok",    ("tiktok.com",)),
+    ("linkedin",  ("linkedin.com", "lnkd.in")),
+    ("facebook",  ("facebook.com", "fb.watch", "fb.com")),
+    ("threads",   ("threads.net", "threads.com")),
+)
+
+
+def host_matches(host: str, hosts: tuple[str, ...]) -> bool:
+    """Suffix match on a DOTTED boundary, so `instagram.com.evil.example` fails
+    while `www.instagram.com` and `vm.tiktok.com` pass."""
+    return any(host == h or host.endswith("." + h) for h in hosts)
+
+
 def detect_platform(url: str) -> str:
-    if "instagram.com" in url:
-        return "instagram"
-    elif "youtube.com" in url or "youtu.be" in url:
-        return "youtube"
-    elif "tiktok.com" in url:
-        return "tiktok"
-    # ⚠️ `lnkd.in` IS THE ONLY URL THE LINKEDIN APP EVER GIVES YOU.
-    # Sharing a post from LinkedIn produces https://lnkd.in/p/<id>, never a
-    # linkedin.com link — so recognising only "linkedin.com" meant the share
-    # path from LinkedIn was rejected 100% of the time with "Couldn't recognize
-    # this link", while pasting a desktop URL worked. Owner report, first
-    # TestFlight build, 2026-09-09. `_fetch_page` already follows redirects, so
-    # naming the platform here is the whole fix.
-    elif "linkedin.com" in url or "lnkd.in" in url:
-        return "linkedin"
-    elif "facebook.com" in url or "fb.watch" in url or "fb.com" in url:
-        return "facebook"
-    # ⚠️ TWO DOMAINS, BOTH LIVE. Threads launched on `threads.net` and moved to
-    # `threads.com`; the app now shares `threads.com` links, but every link
-    # posted before the move — and every one already sitting in someone's notes
-    # — is still a `threads.net` URL that redirects. Recognising only the new
-    # host would reject half the real-world links with "Couldn't recognize this
-    # link", which is the same bug `lnkd.in` caused for LinkedIn above.
-    #
-    # yt-dlp has no Threads extractor, so this never reaches the video path — it
-    # lands on the public page-meta fallback at the bottom of `extract_info()`,
-    # the same route LinkedIn and Facebook take. Threads serves og:title,
-    # og:description and og:image on public posts, and its images come from
-    # `cdninstagram.com` / `fbcdn.net`, which the thumbnail proxy already
-    # allowlists — so nothing else has to change for a Threads save to work.
-    elif "threads.net" in url or "threads.com" in url:
-        return "threads"
+    """Which platform a link belongs to, or `"unknown"`.
+
+    ⚠️ THIS IS A SECURITY BOUNDARY, NOT A LABELLER. `routes/reels.py` calls it
+    as the ONLY synchronous check before the server fetches the URL on the
+    caller's behalf (`/save` and `/share-save`), and `main.py`'s probe gates on
+    it too. Whatever it calls a platform, the server will go and fetch.
+
+    It used to substring-match the whole URL — `if "instagram.com" in url` — and
+    that made every one of those endpoints an SSRF gadget: the check passed on
+    any string CONTAINING a platform name, wherever it appeared.
+
+        http://169.254.169.254/latest/meta-data?q=threads.com   → "threads"
+        http://10.0.0.5:8080/instagram.com                      → "instagram"
+        https://threads.com@evil.example/                       → "threads"
+
+    Cloud metadata, a private address, and a host with the platform name parked
+    in the userinfo field. The server would fetch each one and hand the page
+    title and description back on a card. Fixed 2026-09-23 (owner-reported);
+    regression cases live in `tests/test_extractor.py::test_detect_platform_*`.
+
+    So: parse, then match the HOSTNAME on a dotted boundary. `urlparse` is what
+    makes the userinfo trick fail — `hostname` for that third URL is
+    `evil.example`, which matches nothing.
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return "unknown"
+    # http(s) only. `file:`, `gopher:` and friends have no business reaching a
+    # fetcher, and they cannot be a platform link by definition.
+    if parsed.scheme not in ("http", "https"):
+        return "unknown"
+    try:
+        host = (parsed.hostname or "").lower()
+    except ValueError:      # malformed IPv6 literal, e.g. "http://[::1"
+        return "unknown"
+    # A trailing dot is a legal FQDN ("threads.com.") and resolves the same, so
+    # it must not be a way to sit just outside the match.
+    host = host.rstrip(".")
+    for platform, hosts in _PLATFORM_HOSTS:
+        if host_matches(host, hosts):
+            return platform
     return "unknown"
 
 
