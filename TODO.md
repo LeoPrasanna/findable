@@ -309,6 +309,14 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
   open redirect on a major platform, and yt-dlp parses the answer as media rather than
   handing it back as page text — but it is not zero. Options if it ever matters: run
   extraction egress through a proxy with an allowlist, or drop to a pinned-IP HTTP client.
+  ⚠️ **NOT URGENT TODAY, AND THE REASON IS WHAT TO WATCH:** an SSRF is only worth as much
+  as what it can reach, and right now that is nothing — one Render service, no private
+  network, no internal-only endpoints, and Supabase sits on the public internet behind a
+  credential rather than on a trusted subnet. **The trigger to do this is architectural,
+  not calendar-based: the day a SECOND service, a private network, a cache, or any
+  internal-only endpoint appears, this moves to 🔴.** Doing it before then buys almost no
+  risk reduction and puts a proxy hop in the save path, which is the one path whose
+  success rate the app lives on.
   Remaining: live-model adversarial evals (steering resistance can't
   be unit-tested), `/security-review` on the branch before first deploy, a ZAP baseline
   scan against staging, and one load smoke (~50 concurrent saves).
