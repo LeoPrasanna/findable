@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { api } from './api';
 import { fetchClientMetadata } from './clientExtract';
 import { recordNote } from './notifyStore';
+import { popNotice, savedNotice, failedNotice, usableTitle } from './shareNotice';
 import { refreshUsage } from './usageCache';
 
 /**
@@ -93,6 +94,50 @@ Notifications.setNotificationHandler({
   }),
 });
 
+/**
+ * The 2–3 second "yes, that went to Findable" pop.
+ *
+ * ⚠️ IT IS NOT RECORDED IN THE DRAWER. The drawer is a log of what happened to
+ * your saves; "we started saving" is not an outcome, and logging both halves
+ * would double every entry. Only the result below is recorded.
+ *
+ * ⚠️ ANDROID AUTO-DISMISSES IT, iOS CANNOT. `autoDismiss` maps to Android's
+ * `setTimeoutAfter`, which removes the banner after the delay. iOS has no
+ * equivalent for a local notification — it stays in Notification Centre until
+ * the user clears it or the result replaces it. Naming the asymmetry rather
+ * than pretending it does not exist: the OS decides this one, not us.
+ */
+const POP_MS = 3000;
+
+async function pop(platform: string) {
+  if (!(await canNotify())) return;
+  const { title, body } = popNotice(platform);
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        // Replaced in place by the result on Android, so the two never stack.
+        ...(Platform.OS === 'android'
+          ? { autoDismiss: true, channelId: 'saves' }
+          : {}),
+      },
+      identifier: SHARE_POP_ID,
+      trigger: null,
+    });
+    if (Platform.OS === 'android') {
+      setTimeout(() => {
+        Notifications.dismissNotificationAsync(SHARE_POP_ID).catch(() => {});
+      }, POP_MS);
+    }
+  } catch {
+    // A missing pop must never cost the save.
+  }
+}
+
+/** One id, so a second share replaces the first pop instead of stacking. */
+const SHARE_POP_ID = 'findable-share-pop';
+
 async function notify(title: string, body: string) {
   /**
    * ⚠️ RECORDED BEFORE THE PERMISSION CHECK, AND BEFORE THE POST.
@@ -127,6 +172,15 @@ export async function ensureNotificationChannel() {
       name: 'Saved links',
       importance: Notifications.AndroidImportance.DEFAULT,
     });
+    // ⚠️ A SEPARATE CHANNEL, NOT A SHARED ONE. Android channels are the user's
+    // controls, not ours: someone who wants save receipts but not task nags
+    // must be able to have exactly that, and a single channel makes it
+    // all-or-nothing. It also means their choice survives our defaults —
+    // importance can be lowered by the user and we can never raise it back.
+    await Notifications.setNotificationChannelAsync('reminders', {
+      name: 'Task reminders',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    });
   } catch {}
 }
 
@@ -141,6 +195,11 @@ export async function ensureNotificationChannel() {
 export async function saveSharedLink(url: string): Promise<boolean> {
   const where = platformLabel(url);
   await ensureNotificationChannel();
+  // ⚠️ BEFORE THE NETWORK, NOT AFTER IT. The pop's entire job is to confirm the
+  // share landed while the user is still looking at the app they shared from —
+  // posting it after the save would put it seconds later, often after they have
+  // already moved on, which is the same as not posting it.
+  pop(where);
   try {
     // Same two-step as app/save.tsx: kick the device-side metadata fetch off
     // alongside the save (never in front of it), then deliver it after. On
@@ -173,19 +232,32 @@ export async function saveSharedLink(url: string): Promise<boolean> {
     // The AI budget just moved; keep the cache honest for the next screen.
     refreshUsage();
 
-    await notify(
-      `Saved from ${where}`,
-      'Your summary is being written — it will be ready in your library.',
-    );
+    /**
+     * ⚠️ RE-READ THE REEL BEFORE ANNOUNCING IT. `api.saveReel` answers the
+     * instant the row exists, so its title is whatever the save request could
+     * work out — usually the "Instagram Reel" placeholder. The real title
+     * arrives from the metadata delivery above, which has just finished, so one
+     * GET is the difference between "Saved to Findable" and
+     * `“How to cold brew coffee at home” is in your library.`
+     *
+     * Best-effort: if the re-read fails we announce the save with what we have.
+     * The save succeeded, and that is what the notification is about.
+     */
+    let title = usableTitle(reel.title);
+    if (!title) {
+      title = usableTitle((await api.getReel(reel.id).catch(() => null))?.title);
+    }
+    const ok = savedNotice(where, title);
+    await notify(ok.title, ok.body);
     return true;
   } catch (e: any) {
     // Say what happened. A silent failure here is the worst outcome of all:
     // the user believes the link is kept, carries on scrolling, and finds
     // nothing later.
-    await notify(
-      `Couldn't save that ${where} link`,
-      e?.message || 'Open Findable and paste it to try again.',
-    );
+    // The backend's `detail` is already plain English and tier-aware, so it is
+    // preferred over anything invented here — see failedNotice.
+    const bad = failedNotice(where, e?.message);
+    await notify(bad.title, bad.body);
     return false;
   }
 }

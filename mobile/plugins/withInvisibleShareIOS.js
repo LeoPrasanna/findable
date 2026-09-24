@@ -216,8 +216,19 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
   /// otherwise leave the share sheet spinning forever, which is worse than a
   /// missing notification.
   private func findableReportShare(link: String, defaults: UserDefaults) {
-    let title = "Saving from " + findablePlatformLabel(link)
-    let body = "Findable is saving it in the background — it'll be in your library shortly."
+    // ⚠️ SAME COPY AS THE OTHER TWO PROCESSES — services/shareNotice.ts
+    // (popNotice) and ShareSave.kt. The title names the platform because this
+    // fires while the user is still looking at Instagram, and "did that go to
+    // Findable?" is the only question it has to answer.
+    //
+    // ⚠️ THE BODY IS DIFFERENT FROM ANDROID'S ON PURPOSE. On Android this pop is
+    // replaced seconds later by a result notification that names the reel or the
+    // reason it failed. iOS cannot: the upload is a background session the
+    // system completes after this process is dead, and it hands that completion
+    // to the CONTAINING APP, not to us. So this is the only thing the user will
+    // see, and it must not imply a confirmation we never got.
+    let title = findablePlatformLabel(link) + " → Findable"
+    let body = "Saving this one in the background — it'll be in your library shortly."
 
     // The drawer receipt goes in FIRST, and unconditionally. A user who denied
     // notifications gets no banner at all, so this list is the only place the

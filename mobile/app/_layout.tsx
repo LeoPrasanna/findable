@@ -20,6 +20,7 @@ import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { retryShareKeyIfNeeded } from '../services/shareKey';
 import { drainShareReceipts } from '../services/shareReceipts';
+import * as Notifications from 'expo-notifications';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { WelcomeBack } from '../components/WelcomeBack';
 import { onUi, emitUi, useDismissOnBackground } from '../services/uiBus';
@@ -238,6 +239,8 @@ function ShareIntentHandler() {
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
 function Gate() {
   const { session, loading, celebrate } = useAuth();
+  // Used by the notification tap handler below — a reminder opens the slate.
+  const router = useRouter();
   // One family, three weights — Inter carries the wordmark, headings, body and
   // labels alike (see constants/theme.ts). We don't block the gate on them; RN
   // falls back to the system face, which is metrically close enough that there
@@ -302,6 +305,34 @@ function Gate() {
     // the right reading of "the app went away".
     return () => sub?.remove();
   }, [session]);
+
+  /**
+   * Tapping a notification opens what it is about.
+   *
+   * ⚠️ TWO ENTRY POINTS, AND MISSING THE SECOND IS THE CLASSIC BUG. A tap while
+   * the app is running arrives on the listener; a tap that LAUNCHES the app
+   * happened before any listener existed, and is only readable from
+   * `getLastNotificationResponseAsync`. Handling one and not the other means the
+   * reminder works when you did not need it and does nothing when you did.
+   *
+   * ⚠️ `data.route` IS OUR OWN STRING, not user input — it is written by
+   * services/reminders.ts. It is still checked against a known list rather than
+   * pushed blind, because a notification payload is the kind of thing that
+   * arrives from outside the app's own memory.
+   */
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const ROUTES: Record<string, string> = { '/todos': '/todos' };
+    const open = (response: Notifications.NotificationResponse | null) => {
+      const route = response?.notification?.request?.content?.data?.route;
+      const target = typeof route === 'string' ? ROUTES[route] : undefined;
+      if (target) router.push(target as any);
+    };
+    // Cold start: the tap that opened the app.
+    Notifications.getLastNotificationResponseAsync().then(open).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(open);
+    return () => sub?.remove();
+  }, [router]);
 
   // Native boot: localStorage isn't readable at module init there, so apply the
   // stored preference right after mount (one default-scheme first frame).

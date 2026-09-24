@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, ScrollView, Switch } from 'react-native'
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { TodoSettings, GOAL_OPTIONS } from '../services/todoSettings';
+import { REMINDER_TIMES } from '../services/todoSettings';
 import { TODO_LANDING_TITLE } from '../constants/todoBrand';
 import type { TodoPriority } from '../services/api';
 import { colors, spacing, font, radius, shadow, themed } from '../constants/theme';
@@ -113,6 +114,49 @@ function TodoSettingsSheetImpl({ visible, settings, onChange, onClose }: Props) 
                 thumbColor="#FFF"
               />
             </Row>
+
+            {/* ── Reminders ──────────────────────────────────────────────
+                ⚠️ OFF BY DEFAULT, AND THE PERMISSION IS ASKED HERE. An app that
+                starts notifying before it was asked is how the whole category
+                gets switched off at the OS level — and on Android 13+ a refused
+                POST_NOTIFICATIONS is effectively permanent. The sheet is the one
+                place the user has just said "yes, remind me", which is the only
+                good moment to ask.
+
+                ⚠️ ONE NOTIFICATION A DAY, NOT ONE PER TASK. Five tasks due on
+                Monday is one reminder saying five, not five saying one. See
+                services/todoDates.ts → digests. */}
+            <Text style={styles.section}>REMINDERS</Text>
+            <Row
+              title="Remind me about due tasks"
+              hint="One notification on days that have something due. Tapping it opens your slate."
+            >
+              <Switch
+                value={settings.reminders}
+                onValueChange={v => onChange({ reminders: v })}
+                trackColor={{ true: colors.accent, false: colors.border }}
+                thumbColor="#FFF"
+              />
+            </Row>
+            {settings.reminders && (
+              <Row title="At" hint="Your device's local time.">
+                <View style={styles.chipRow}>
+                  {REMINDER_TIMES.map(t => {
+                    const on = settings.reminderTime === t;
+                    return (
+                      <Pressable
+                        key={t}
+                        style={[styles.chipSm, on && styles.chipOn]}
+                        onPress={() => onChange({ reminderTime: t })}
+                        scaleTo={0.95}
+                      >
+                        <Text style={[styles.chipText, on && styles.chipTextOn]}>{t}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </Row>
+            )}
 
             <Text style={styles.section}>WHEN YOU FINISH ONE</Text>
             <Row

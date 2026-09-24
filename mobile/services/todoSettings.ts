@@ -29,6 +29,13 @@ export interface TodoSettings {
   showCompleted: boolean;
   /** Sort "Someday" items to the top instead of the bottom. */
   somedayFirst: boolean;
+  /** One local notification a day, on days that have something due.
+   *  Off by default: an app that starts notifying you before you asked is how
+   *  notifications get switched off at the OS level, permanently. */
+  reminders: boolean;
+  /** When that notification fires, "HH:MM" in the DEVICE's timezone — the same
+   *  local-first rule every date in this file follows. */
+  reminderTime: string;
 }
 
 export const DEFAULT_SETTINGS: TodoSettings = {
@@ -38,7 +45,13 @@ export const DEFAULT_SETTINGS: TodoSettings = {
   askDeleteSaveOnDone: true,
   showCompleted: false,
   somedayFirst: false,
+  reminders: false,
+  reminderTime: '09:00',
 };
+
+/** Offered on the Reminders row. Morning-of, because a reminder you cannot act
+ *  on yet is a reminder you dismiss. */
+export const REMINDER_TIMES = ['07:00', '08:00', '09:00', '12:00', '18:00', '20:00'] as const;
 
 export const GOAL_OPTIONS = [0, 3, 5, 8, 10] as const;
 
@@ -70,6 +83,12 @@ function coerce(raw: unknown): TodoSettings {
       ? v.askDeleteSaveOnDone : DEFAULT_SETTINGS.askDeleteSaveOnDone,
     showCompleted: typeof v.showCompleted === 'boolean' ? v.showCompleted : DEFAULT_SETTINGS.showCompleted,
     somedayFirst: typeof v.somedayFirst === 'boolean' ? v.somedayFirst : DEFAULT_SETTINGS.somedayFirst,
+    reminders: typeof v.reminders === 'boolean' ? v.reminders : DEFAULT_SETTINGS.reminders,
+    // A stored time is validated, not trusted: a junk value here would schedule
+    // nothing and look like the toggle is broken.
+    reminderTime: typeof v.reminderTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v.reminderTime)
+      ? v.reminderTime
+      : DEFAULT_SETTINGS.reminderTime,
   };
 }
 

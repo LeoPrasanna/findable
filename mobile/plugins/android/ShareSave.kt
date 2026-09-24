@@ -275,7 +275,7 @@ class ShareSaveService : Service() {
         val key = intent?.getStringExtra(EXTRA_KEY)
 
         ensureChannel(this)
-        promote()
+        promote(url)
 
         if (url == null || api == null || key == null) {
             stopSelf(startId)
@@ -284,12 +284,12 @@ class ShareSaveService : Service() {
 
         Thread {
             val where = platformLabel(url)
-            val ok = try { postSave(api, key, url) } catch (t: Throwable) { false }
-            val title = if (ok) "Saved from $where" else "Couldn't save that $where link"
-            val body = if (ok)
-                "Your summary is being written — it will be ready in your library."
-            else
-                "Open Findable and paste it to try again."
+            val outcome = try {
+                postSave(api, key, url)
+            } catch (t: Throwable) {
+                SaveOutcome(false, "", "No connection when it tried.")
+            }
+            val (title, body) = resultNotice(where, outcome)
 
             // Recorded before it is posted, and recorded even if posting is
             // refused: a user who declined notifications still needs one place
@@ -310,8 +310,16 @@ class ShareSaveService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun promote() {
-        val note = buildNotification(this, "Saving to Findable", "Sending the link…", true)
+    private fun promote(url: String?) {
+        // ⚠️ THIS IS THE "IT WENT TO FINDABLE" POP. It is the foreground
+        // service's own notification — the one Android requires — rather than a
+        // second banner, because two notifications for one share is how a
+        // useful receipt becomes noise. It names the platform for the same
+        // reason the JS pop does: it fires while the user is still looking at
+        // Instagram, and "which app did I just share to?" is the only question
+        // it has to answer. It is replaced by the result seconds later.
+        val title = if (url != null) "${platformLabel(url)} → Findable" else "Saving to Findable"
+        val note = buildNotification(this, title, "Saving this one to your library…", true)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(ONGOING_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -326,7 +334,7 @@ class ShareSaveService : Service() {
 
     /** True when the card exists server-side. The summary continues on the
      *  backend afterwards, exactly as for a save made in the app. */
-    private fun postSave(api: String, key: String, url: String): Boolean {
+    private fun postSave(api: String, key: String, url: String): SaveOutcome {
         var conn: HttpURLConnection? = null
         return try {
             conn = URL("$api/api/reels/share-save").openConnection() as HttpURLConnection
@@ -342,13 +350,87 @@ class ShareSaveService : Service() {
             conn.outputStream.use { it.write(JSONObject().put("url", url).toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
             // 409-style duplicates are still "it's in your library".
-            code in 200..299 || code == 409
+            if (code in 200..299 || code == 409) {
+                // ⚠️ THE TITLE IS IN THIS RESPONSE AND WAS BEING THROWN AWAY.
+                // /share-save answers with the created card, so "Saved from
+                // Instagram" could always have been `Saved: "<the actual
+                // reel>"` — the one thing that tells the user WHICH save this
+                // notification is about, hours later in the shade.
+                val title = try {
+                    JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        .optString("title", "")
+                } catch (t: Throwable) {
+                    ""
+                }
+                SaveOutcome(true, title, null)
+            } else {
+                // FastAPI puts a human sentence in `detail`, already tier-aware
+                // ("Your library is full (50 saves). Delete a save to make
+                // room."). Inventing our own message here would be worse copy
+                // AND a second place to keep in step.
+                val detail = try {
+                    JSONObject(conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "")
+                        .optString("detail", "")
+                } catch (t: Throwable) {
+                    ""
+                }
+                SaveOutcome(false, "", if (detail.isNotBlank()) detail else "The server refused it (error $code).")
+            }
         } catch (t: Throwable) {
-            false
+            // No response at all: offline, DNS, TLS, or a timeout on a cold
+            // instance. The user can act on that, so say it.
+            SaveOutcome(false, "", "No connection when it tried.")
         } finally {
             try { conn?.disconnect() } catch (t: Throwable) { }
         }
     }
+}
+
+/** What the save actually did, so the notification can say it. */
+internal data class SaveOutcome(val ok: Boolean, val title: String, val reason: String?)
+
+/**
+ * ⚠️ A PLACEHOLDER IS NOT A TITLE. The backend writes "Instagram Reel" when it
+ * could not read the post; quoting that back claims a read that never happened.
+ * Mirrors `usableTitle` in mobile/services/shareNotice.ts.
+ */
+internal fun usableTitle(title: String): String? {
+    val t = title.trim()
+    if (t.isEmpty()) return null
+    val placeholder = Regex(
+        "^(instagram|facebook|linkedin|tiktok|threads|youtube|web|unknown)\\s+(reel|post|video|short|link)s?$",
+        RegexOption.IGNORE_CASE,
+    )
+    return if (placeholder.matches(t)) null else t
+}
+
+/** Cap a title so the notification body stays one readable line. */
+internal fun shortTitle(t: String, max: Int = 70): String =
+    if (t.length <= max) t else t.take(max).trimEnd(' ', ',', ';', ':', '.', '-') + "…"
+
+/**
+ * The result wording. ⚠️ THIS IS A HAND-WRITTEN COPY of
+ * mobile/services/shareNotice.ts — Kotlin cannot import TypeScript, and this
+ * process has no JS runtime. When the wording changes there it changes here, in
+ * a NATIVE BUILD. The same rule as `platformLabel` below, and for the same
+ * reason it has already drifted once.
+ */
+internal fun resultNotice(where: String, outcome: SaveOutcome): Pair<String, String> {
+    if (outcome.ok) {
+        val t = usableTitle(outcome.title)
+        return if (t != null) {
+            "Saved to Findable" to "\u201C${shortTitle(t)}\u201D is in your library."
+        } else {
+            "Saved to Findable" to "Your $where link is in your library. The summary is being written."
+        }
+    }
+    val reason = outcome.reason ?: "No connection when it tried."
+    // A server detail usually carries its own instruction; only add the retry
+    // line when it does not.
+    val tellsThemWhatToDo = Regex("delete|open findable|try|sign in|wait", RegexOption.IGNORE_CASE)
+        .containsMatchIn(reason)
+    val body = if (tellsThemWhatToDo) reason else "$reason Share it again to retry."
+    return "Couldn't save that $where link" to body
 }
 
 /** Human name for the notification, from the URL alone — mirrors

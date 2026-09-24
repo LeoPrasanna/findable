@@ -438,6 +438,39 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
 
 ## Features — open
 
+- [x] **Notifications round 2 — the share pop, the result, and task reminders** (owner,
+  2026-09-23/24). ⚠️ **Native: rides the held build with the round-1 fixes.**
+  1. **Pop** the moment a share lands — `Instagram → Findable`. On Android it is the
+     foreground service's own notification (one banner, not two) and is replaced by the
+     result; the JS path auto-dismisses it after 3 s. ⚠️ **iOS cannot auto-dismiss a local
+     notification** — no API for it — so it stays in Notification Centre until cleared.
+     The OS decides that one, not us.
+  2. **Result names the reel**: `Saved to Findable · “<title>” is in your library.` The
+     title was always in the /share-save response and was being thrown away. A placeholder
+     ("Instagram Reel") is never quoted back — that claims a read that never happened.
+     Failures use the server's own `detail`, which is already plain English and tier-aware,
+     and gain "Share it again to retry." only when they do not already say what to do.
+  3. **Task reminders**: one digest per day at a chosen time on days that have something
+     due, tapping opens the Slate (cold start included). Off by default; the permission is
+     asked at the toggle, because Android 13+ gives you one good ask.
+- [ ] 👤 **iOS silent shares still cannot report SUCCESS OR FAILURE** — the one part of the
+  owner's request that is not done, and it is architectural rather than an oversight. The
+  Share Extension's upload is a background `URLSession`; iOS completes it after the
+  extension process is dead and delivers that completion to the **containing app** via
+  `application(_:handleEventsForBackgroundURLSessionIdentifier:)`. So the extension's
+  notification says "Saving…", never "Saved", and there is no second notification. Fixing
+  it properly means a `withAppDelegate` config plugin that recreates the session with a
+  delegate and posts the outcome — ~100 lines of Swift in a file Expo owns. Worth doing
+  once the current build is out and the softer wording has been tried in practice.
+- **Notifications deliberately NOT added** (considered 2026-09-24, so they are not
+  relitigated): *summary ready* — needs server push, which needs tokens, a sender and a
+  privacy-policy change, for an event the user is not waiting on; *save-cap warnings* —
+  already an in-app banner at 90% and a popup at 95%, and a notification about a limit you
+  have not hit is a nag; *daily AI quota reset* — pure noise; *weekly "you have N unread
+  saves"* — an engagement nag, and the fastest way to get every Findable notification
+  switched off, including the ones people asked for. **Support needs none**: support is
+  email, and the app cannot notify about a reply it never sees.
+
 - [x] **Notifications: the three gaps are closed** (owner, 2026-09-23) — ⚠️ **NATIVE, so
   they reach nobody until the next build.** (1) Two user-facing strings still said
   "SaveHere"; (2) an iOS silent share reported NOTHING — no banner, no drawer row, so a

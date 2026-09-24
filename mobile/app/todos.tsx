@@ -17,6 +17,7 @@ import { emitUi, useDismissOnBackground } from '../services/uiBus';
 import { Label, EmptyState } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
+import { syncReminders, askReminderPermission } from '../services/reminders';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
 import { mergeTodoList } from '../services/todoMerge';
 import { useTodoSettings } from '../services/todoSettings';
@@ -288,6 +289,24 @@ export default function TodosScreen() {
   // Changing the filter is an explicit instruction about what to show; a row
   // held open by Undo must not outlive it.
   useEffect(() => { restored.current.clear(); }, [settings.showCompleted]);
+
+  /**
+   * Keep the scheduled reminders in step with the list.
+   *
+   * ⚠️ HERE, NOT IN _layout.tsx. Rescheduling needs the tasks, and the root
+   * layout does not have them — putting it there would mean fetching the whole
+   * to-do list on every app resume for a feature most people leave off. This
+   * screen already holds the list, and it is the screen you are on when you
+   * change a due date, so it is where the schedule can be right for free.
+   *
+   * ⚠️ THE HONEST LIMIT OF THAT: a task added on ANOTHER device does not move
+   * this phone's schedule until this screen is next opened. Local notifications
+   * are scheduled on the device; without push there is no other moment to learn
+   * about it. Documented rather than papered over.
+   */
+  useEffect(() => {
+    syncReminders(todos, { enabled: settings.reminders, time: settings.reminderTime });
+  }, [todos, settings.reminders, settings.reminderTime]);
 
   useFocusEffect(useCallback(() => {
     // The rolling hero is the page title, so the nav bar carries no title —
@@ -724,7 +743,15 @@ export default function TodosScreen() {
       <TodoSettingsSheet
         visible={settingsOpen}
         settings={settings}
-        onChange={updateSettings}
+        onChange={patch => {
+          // ⚠️ ASK AT THE TOGGLE, NOT AT LAUNCH. This is the one moment the user
+          // has just said they want to be notified; anywhere else the sheet
+          // arrives unprompted and gets refused, which on Android 13+ is
+          // effectively permanent. The setting is saved either way — a refused
+          // permission is not a reason to lie about what the switch says.
+          if (patch.reminders) askReminderPermission();
+          updateSettings(patch);
+        }}
         onClose={closeSettings}
       />
 
