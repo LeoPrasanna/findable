@@ -48,6 +48,35 @@ because a pause is reversible. A deletion would not have been.
 
 ---
 
+## ⚠️ THE OTA CHANNEL IS FROZEN — read this before publishing an update
+
+**State on 2026-09-24:** `develop` carries NATIVE changes that no build contains
+(PR #120 — the iOS share receipt, the Kotlin strings, the Threads label, the podspec
+URLs). The owner chose to hold the build so the to-do reminders work can ride along in
+one build instead of two. That decision has one consequence, and it is the silent kind:
+
+> **Any `eas update` published from `develop` right now reaches ZERO devices.**
+
+The runtime version moved off `a86bf3fd…` (iOS build 1.0.11) and `90573df5…` (Android
+build 11), and a mismatched update does not warn — it simply never applies. So until the
+next build ships:
+
+- **Do not publish JS-only fixes from `develop` and tell the owner they can test them.**
+  They cannot. If something urgent must go out over the air, it has to be published from
+  a branch off the last built commit (`cf05b96`), not from `develop`.
+- The next build's runtime version is whatever **EAS computes at build time**. ⚠️ Local
+  `fingerprint:generate` measured THREE different values for the same commit on 2026-09-24
+  (`b8879267…`, `f046ecc5…`, `c5badda2…`) depending on line endings in the working tree —
+  this machine has `core.autocrlf=true`, so a file written by a tool with LF hashes
+  differently from the same file after a checkout. **`eas build:view <id>` is the only
+  authority**, and the number `eas update` prints must equal it. Never publish an update
+  because a local fingerprint "looked right".
+- ⚠️ **Builds and updates should be run from the SAME machine.** A build run from a Linux
+  cloud session and an update published from this Windows checkout can disagree for the
+  same reason.
+
+Delete this section the day the build ships and the channel is live again.
+
 ## 🔴 Launch blockers
 
 - [x] 🔴 👤 **Apple Developer account — $99/year.** Enrolled as **Individual**, Team ID
