@@ -83,6 +83,18 @@ because a pause is reversible. A deletion would not have been.
     screen misconfigured, client secret rotated, project suspended — every Android user
     is locked out with no fallback and no password reset to fall back on. Watch item, not
     a task; the mitigation if it ever bites is a magic-link, which needs the SMTP above.
+- [ ] 🔴 👤 **Decide the extraction egress question BEFORE prod goes live** (owner,
+  2026-09-23: "keep this as important task before production live"). SSRF on the save
+  path is closed both ways in code — host matching on the submitted URL, and every
+  redirect hop re-checked — but **yt-dlp does its own networking with no host policy we
+  can hook**, so an open redirect on a major platform could still send it at an internal
+  address. Today that reaches nothing (one Render service, no private network, no
+  internal-only endpoints, Supabase on the public internet behind a credential), which is
+  why it is not fixed yet. **This item is the checkpoint, not the work:** at the prod
+  cutover, answer "what can our server reach that the public cannot?" — if the answer is
+  still "nothing", write that down and move on; if prod adds a second service, a private
+  network or a cache, the egress allowlist ships with it. Full reasoning under
+  "Pre-launch security pass" below.
 - [ ] 🔴 👤 **Apply `backend/scripts/enable_rls.sql` to the PROD Supabase project**
   (ref `lukmwwcilrjqqtgqbynq`) **on the day you point the app at prod** (owner,
   2026-09-13: everything is on dev today, so this waits for the move). Needs prod
@@ -372,15 +384,12 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
 
 ## Infrastructure — open
 
-- [ ] **Two stale `savehere` URLs left on purpose, in `mobile/modules/share-config/ios/
-  ShareConfigModule.podspec`** (`s.homepage`, `s.source`). ⚠️ **DO NOT "tidy" THEM
-  SEPARATELY — EDITING THAT FILE MOVES THE iOS FINGERPRINT.** Measured 2026-09-13:
-  changing those two strings took the runtime version from `a86bf3fd…` to `496e1f01…`,
-  which would have orphaned every OTA from TestFlight build 1.0.11. The podspec is a
-  local Expo module, so `@expo/fingerprint` hashes it like any other native source. Both
-  fields are cosmetic and GitHub redirects the old repo URL anyway. **Fix them in the
-  same commit as the next native build**, never on their own. Same trap as the
-  `package.json` scripts rule in `mobile/AGENTS.md`, one directory over.
+- [x] **The two stale `savehere` URLs in `ShareConfigModule.podspec` are fixed** — in a
+  native-build commit, which was the whole condition (2026-09-23). Measured on 09-13:
+  editing that file moved the iOS fingerprint `a86bf3fd…` → `496e1f01…`, so doing it on a
+  JS-only round would have orphaned every OTA from the installed build. The rule stands
+  for next time: **a local Expo module's files are hashed like any other native source —
+  never touch one outside a build round.**
 
 - [ ] 👤 **Region + Cloudflare.** Pick the Render region nearest first users (Singapore
   for India-first) — **effectively unchangeable later**. Once the domain exists, put
@@ -399,6 +408,23 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
 ---
 
 ## Features — open
+
+- [x] **Notifications: the three gaps are closed** (owner, 2026-09-23) — ⚠️ **NATIVE, so
+  they reach nobody until the next build.** (1) Two user-facing strings still said
+  "SaveHere"; (2) an iOS silent share reported NOTHING — no banner, no drawer row, so a
+  failed save looked exactly like a successful one, while Android had both from day one;
+  (3) Kotlin's `platformLabel` never learned Threads, so a Threads share said "Saved from
+  the web" for a week. All three were native strings or native code, which is precisely
+  why a JS-only release could not have carried them.
+  - ⚠️ **ONE LIST, THREE PROCESSES.** `platformLabel` now exists in `services/shareSave.ts`,
+    `plugins/android/ShareSave.kt` AND the injected Swift. None can call the others. When
+    a platform is added, the JS copy ships instantly and the other two wait for a build —
+    put them on the build's checklist rather than assuming the OTA carried them.
+  - The iOS receipt says **"Saving from X"**, never "Saved": the upload is a background
+    session the system completes after the extension is dead, so a confirmation would be
+    a claim we have not got. Reconciling it to a definite saved/failed would mean handling
+    `handleEventsForBackgroundURLSession` in the app delegate — worth doing only if the
+    softer wording proves confusing in testing.
 
 - [ ] **Deep linking** — `savehere://reel/{id}` so a share-extension save opens the
   detail screen directly.

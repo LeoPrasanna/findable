@@ -3,6 +3,7 @@ import { NativeModule, requireOptionalNativeModule } from 'expo';
 declare class ShareConfigNative extends NativeModule {
   set(json: string): boolean;
   clear(): boolean;
+  takePending(): string;
 }
 
 /**
@@ -30,5 +31,23 @@ export function clearShareConfig(): boolean {
     return native?.clear() ?? false;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Receipts the Share Extension left behind, cleared as they are read.
+ *
+ * Returns [] on Android, on web, and on any build whose native module predates
+ * `takePending` — `requireOptionalNativeModule` gives us an object without the
+ * function there, so the call itself is guarded rather than the platform.
+ */
+export function takePendingShares(): { title: string; body: string; at: number }[] {
+  try {
+    const raw = native?.takePending?.();
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
   }
 }

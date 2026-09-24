@@ -94,6 +94,10 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
     findableOpenHostApp(type: type)
   }
 
+  /// Guards \`completeRequest\`, which must run exactly once — the notification
+  /// callback and the 1.5 s safety net both reach for it.
+  private var findableDidFinish = false
+
   /// The link the user actually shared. Some apps hand over a bare URL, others
   /// a sentence with a URL inside it ("Look at this <url>"), which is why the
   /// text case is scanned rather than trusted.
@@ -167,8 +171,94 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
     // Clear the stashed payload the app would otherwise pick up and save a
     // SECOND time on its next launch.
     defaults.removeObject(forKey: sharedKey)
-    extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    findableReportShare(link: link, defaults: defaults)
     return true
+  }
+
+  /// Human name for the platform, from the URL alone.
+  ///
+  /// ⚠️ THIS IS THE THIRD COPY of one list — the others are \`platformLabel\` in
+  /// mobile/services/shareSave.ts and in plugins/android/ShareSave.kt. Three
+  /// processes, none of which can call the others. The Kotlin copy already fell
+  /// a week behind on Threads because a JS-only release physically cannot touch
+  /// it; when a platform is added, all three change in the same native build.
+  private func findablePlatformLabel(_ url: String) -> String {
+    let u = url.lowercased()
+    if u.contains("youtube.com") || u.contains("youtu.be") { return "YouTube" }
+    if u.contains("instagram.com") { return "Instagram" }
+    if u.contains("facebook.com") || u.contains("fb.watch") || u.contains("fb.com") { return "Facebook" }
+    if u.contains("tiktok.com") { return "TikTok" }
+    if u.contains("threads.net") || u.contains("threads.com") { return "Threads" }
+    if u.contains("linkedin.com") { return "LinkedIn" }
+    return "the web"
+  }
+
+  /// Tell the user the share happened, then end the extension.
+  ///
+  /// ⚠️ WITHOUT THIS, AN iOS SILENT SHARE WAS COMPLETELY INVISIBLE. Android
+  /// posts a notification AND writes a drawer receipt for every invisible save;
+  /// iOS posted nothing and wrote nothing, so a failure to save looked exactly
+  /// like a success — the precise ambiguity the whole receipt mechanism exists
+  /// to remove (owner report, 2026-09-23).
+  ///
+  /// ⚠️ THE WORDING CLAIMS ONLY WHAT WE KNOW. The upload is a BACKGROUND
+  /// session handed to the system; it completes long after this process is
+  /// dead, and iOS delivers that completion to the containing app, not here. So
+  /// this says "saving", never "saved". Android can say "Saved from X" because
+  /// its foreground service is still alive to see the HTTP status; this cannot,
+  /// and inventing a confirmation we have not got is exactly the kind of lie
+  /// that makes a lost save undiscoverable.
+  ///
+  /// ⚠️ \`completeRequest\` IS DEFERRED UNTIL THE NOTIFICATION IS HANDED OVER.
+  /// It tears the process down, and \`UNUserNotificationCenter\` is asynchronous —
+  /// completing first raced the request into a dead process and posted nothing.
+  /// The 1.5 s safety net exists because a callback that never fires would
+  /// otherwise leave the share sheet spinning forever, which is worse than a
+  /// missing notification.
+  private func findableReportShare(link: String, defaults: UserDefaults) {
+    let title = "Saving from " + findablePlatformLabel(link)
+    let body = "Findable is saving it in the background — it'll be in your library shortly."
+
+    // The drawer receipt goes in FIRST, and unconditionally. A user who denied
+    // notifications gets no banner at all, so this list is the only place the
+    // share is ever reported to them. Capped at 10, the same as the JS drawer.
+    var pending = defaults.array(forKey: "findablePendingShares") as? [[String: Any]] ?? []
+    pending.append([
+      "title": title,
+      "body": body,
+      "at": Date().timeIntervalSince1970 * 1000,
+    ])
+    defaults.set(Array(pending.suffix(10)), forKey: "findablePendingShares")
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+      self?.findableFinish()
+    }
+
+    let center = UNUserNotificationCenter.current()
+    center.getNotificationSettings { [weak self] settings in
+      guard settings.authorizationStatus == .authorized
+        || settings.authorizationStatus == .provisional
+      else {
+        self?.findableFinish()
+        return
+      }
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      content.sound = nil   // a save is not worth a noise
+      let request = UNNotificationRequest(
+        identifier: UUID().uuidString, content: content, trigger: nil)
+      center.add(request) { _ in self?.findableFinish() }
+    }
+  }
+
+  /// Ends the extension exactly once, on the main thread.
+  private func findableFinish() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self, !self.findableDidFinish else { return }
+      self.findableDidFinish = true
+      self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    }
   }
 
   /// expo-share-intent's original behaviour, kept verbatim as the fallback.
@@ -234,7 +324,15 @@ module.exports = function withInvisibleShareIOS(config) {
     }
 
       const file = candidates[0];
-      const source = fs.readFileSync(file, 'utf8');
+      let source = fs.readFileSync(file, 'utf8');
+
+      // ⚠️ The generated controller imports UIKit but not UserNotifications, and
+      // the receipt below posts a local notification. Added here rather than in
+      // REPLACEMENT because an import has to sit at file scope, not inside the
+      // class body the anchor lives in.
+      if (!source.includes('import UserNotifications')) {
+        source = source.replace('import UIKit', 'import UIKit\nimport UserNotifications');
+      }
 
       // Idempotent: prebuild can run more than once against the same tree.
       if (source.includes('findableSaveDirectly')) return cfg;

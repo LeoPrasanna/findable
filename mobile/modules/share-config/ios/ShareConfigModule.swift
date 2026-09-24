@@ -29,6 +29,15 @@ public class ShareConfigModule: Module {
   /// collision would silently break the share itself.
   private static let configKey = "findableShareConfig"
 
+  /// Written by the Share Extension, read exactly once by the app.
+  ///
+  /// The extension is dead by the time anyone could look at its work, so it
+  /// leaves a receipt here instead. The app drains these into the notification
+  /// drawer on its next foreground — see services/shareReceipts.ts. Shape is
+  /// [{ title, body, at }], and it is a CONTRACT with the Swift in
+  /// plugins/withInvisibleShareIOS.js.
+  private static let pendingKey = "findablePendingShares"
+
   public func definition() -> ModuleDefinition {
     Name("ShareConfig")
 
@@ -48,6 +57,29 @@ public class ShareConfigModule: Module {
       }
       defaults.removeObject(forKey: ShareConfigModule.configKey)
       return true
+    }
+
+    /// Hand over every receipt the Share Extension left, and clear them.
+    ///
+    /// ⚠️ TAKE, NOT READ. Clearing in the same call is what stops the same save
+    /// being reported on every foreground for the rest of the install. The cost
+    /// of that choice is that a receipt lost between here and the drawer write
+    /// is lost for good — acceptable, because the drawer is a convenience and
+    /// the library is the record.
+    ///
+    /// Returns JSON rather than an array of dictionaries: Expo's bridge would
+    /// need a typed Record for the latter, and this shape is already defined by
+    /// the Swift that writes it. One `JSON.parse` on the other side is cheaper
+    /// than two type declarations that can disagree.
+    Function("takePending") { () -> String in
+      guard let defaults = UserDefaults(suiteName: ShareConfigModule.appGroup),
+        let raw = defaults.array(forKey: ShareConfigModule.pendingKey),
+        !raw.isEmpty,
+        let data = try? JSONSerialization.data(withJSONObject: raw),
+        let json = String(data: data, encoding: .utf8)
+      else { return "[]" }
+      defaults.removeObject(forKey: ShareConfigModule.pendingKey)
+      return json
     }
   }
 }
