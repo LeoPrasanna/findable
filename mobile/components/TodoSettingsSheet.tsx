@@ -138,24 +138,35 @@ function TodoSettingsSheetImpl({ visible, settings, onChange, onClose }: Props) 
                 thumbColor="#FFF"
               />
             </Row>
+            {/* ⚠️ FULL WIDTH, NOT A `Row`. Six "07:00" chips need ~320dp; a Row
+                gives its children whatever is left beside a flex:1 label, which
+                on a 360dp phone is ~264dp MINUS the label — so the chips ran off
+                the card and the word "At" collapsed into a vertical sliver. It
+                shipped in 1.0.12 looking like the time picker did not exist.
+                Same shape as DAILY GOAL above, which is why that one fits. */}
             {settings.reminders && (
-              <Row title="At" hint="Your device's local time.">
+              <>
+                <Text style={styles.rowHint}>
+                  What time to send it, in your device's own local time.
+                </Text>
                 <View style={styles.chipRow}>
                   {REMINDER_TIMES.map(t => {
                     const on = settings.reminderTime === t;
                     return (
                       <Pressable
                         key={t}
-                        style={[styles.chipSm, on && styles.chipOn]}
+                        style={[styles.chip, on && styles.chipOn]}
                         onPress={() => onChange({ reminderTime: t })}
                         scaleTo={0.95}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
                       >
                         <Text style={[styles.chipText, on && styles.chipTextOn]}>{t}</Text>
                       </Pressable>
                     );
                   })}
                 </View>
-              </Row>
+              </>
             )}
 
             <Text style={styles.section}>WHEN YOU FINISH ONE</Text>

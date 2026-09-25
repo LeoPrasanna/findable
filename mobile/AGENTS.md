@@ -13,14 +13,27 @@ So: new self-checks are invoked **directly** in `.github/workflows/mobile-ci.yml
 The six existing `test:*` scripts predate build 9 and are baked into its
 fingerprint — leave them exactly as they are.
 
-Verify before publishing an update:
+Verify before publishing an update — `compare`, not `generate`:
 
 ```bash
-cd mobile && npx eas-cli@latest fingerprint:generate -p android
+cd mobile && npx eas-cli@latest fingerprint:compare --build-id <installed build id>
 ```
 
-It must equal the installed build's Runtime Version (`eas build:view <id>`).
-If it differs, `eas fingerprint:compare <a> <b>` names the exact cause.
+It prints the build's fingerprint and this directory's side by side and names the
+differing source when they disagree. `generate` gives you a number with nothing
+to check it against, and on this machine (`core.autocrlf=true`) it has returned
+three different values for one commit.
+
+# ⚠️ AND THE SAME TRAP RUNS BACKWARDS
+
+**`mobile/plugins/android/ShareSave.kt` is NOT in the fingerprint.** Measured
+2026-09-25: editing it left the Android runtime on `19e8d21e…`, so the update
+published from that tree applied perfectly — on top of a native share service
+still running the old Kotlin.
+
+So a fingerprint that matches proves the update will REACH the build. It proves
+nothing about whether the native half of your change is in it. **Kotlin and Swift
+changes need an APK/IPA, always**, and nothing will warn you.
 
 ---
 
