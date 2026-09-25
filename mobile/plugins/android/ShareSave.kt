@@ -357,8 +357,7 @@ class ShareSaveService : Service() {
                 // reel>"` — the one thing that tells the user WHICH save this
                 // notification is about, hours later in the shade.
                 val title = try {
-                    JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-                        .optString("title", "")
+                    jsonText(JSONObject(conn.inputStream.bufferedReader().use { it.readText() }), "title")
                 } catch (t: Throwable) {
                     ""
                 }
@@ -369,8 +368,7 @@ class ShareSaveService : Service() {
                 // room."). Inventing our own message here would be worse copy
                 // AND a second place to keep in step.
                 val detail = try {
-                    JSONObject(conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "")
-                        .optString("detail", "")
+                    jsonText(JSONObject(conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""), "detail")
                 } catch (t: Throwable) {
                     ""
                 }
@@ -388,6 +386,23 @@ class ShareSaveService : Service() {
 
 /** What the save actually did, so the notification can say it. */
 internal data class SaveOutcome(val ok: Boolean, val title: String, val reason: String?)
+
+/**
+ * Read a string field that the server is allowed to send as JSON null.
+ *
+ * ⚠️ `optString(key, "")` DOES NOT RETURN "" FOR A JSON null ON ANDROID — it
+ * returns the literal four-character string "null". Android's org.json stores a
+ * JSON null as the `JSONObject.NULL` sentinel, which is not Java null, so the
+ * fallback never fires and `String.valueOf(NULL)` is what comes back.
+ *
+ * That shipped in 1.0.12 and every Instagram silent share announced
+ * `“null” is in your library.` — Instagram is exactly the case where the server
+ * has no title to give (its datacenter IP is served a login wall, and the native
+ * share path has no device-side metadata fetch to make up for it), so the one
+ * platform most likely to be shared was the one that always read as broken.
+ */
+internal fun jsonText(o: JSONObject, key: String): String =
+    if (o.isNull(key)) "" else o.optString(key, "")
 
 /**
  * ⚠️ A PLACEHOLDER IS NOT A TITLE. The backend writes "Instagram Reel" when it

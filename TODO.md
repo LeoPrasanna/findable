@@ -48,34 +48,80 @@ because a pause is reversible. A deletion would not have been.
 
 ---
 
-## ⚠️ THE OTA CHANNEL IS FROZEN — read this before publishing an update
+## ▶ OTA CHANNEL — LIVE AGAIN, and these are the runtimes to match
 
-**State on 2026-09-24:** `develop` carries NATIVE changes that no build contains
-(PR #120 — the iOS share receipt, the Kotlin strings, the Threads label, the podspec
-URLs). The owner chose to hold the build so the to-do reminders work can ride along in
-one build instead of two. That decision has one consequence, and it is the silent kind:
+Build 1.0.12 / Android build 12 shipped from `aa80f05` on 2026-09-24 and the freeze is
+over. The `preview` channel now serves:
 
-> **Any `eas update` published from `develop` right now reaches ZERO devices.**
+| Platform | Runtime version | Build |
+|---|---|---|
+| iOS | `6deee3ef90d4fae6547ba9cb0985985127e0bc82` | 1.0.12 (TestFlight) |
+| Android | `19e8d21e48a0129d4a7e8ca8f6f82de42d277bcd` | build 12 (APK) |
 
-The runtime version moved off `a86bf3fd…` (iOS build 1.0.11) and `90573df5…` (Android
-build 11), and a mismatched update does not warn — it simply never applies. So until the
-next build ships:
+Before every `eas update`, confirm the local project still computes those two:
 
-- **Do not publish JS-only fixes from `develop` and tell the owner they can test them.**
-  They cannot. If something urgent must go out over the air, it has to be published from
-  a branch off the last built commit (`cf05b96`), not from `develop`.
-- The next build's runtime version is whatever **EAS computes at build time**. ⚠️ Local
-  `fingerprint:generate` measured THREE different values for the same commit on 2026-09-24
-  (`b8879267…`, `f046ecc5…`, `c5badda2…`) depending on line endings in the working tree —
-  this machine has `core.autocrlf=true`, so a file written by a tool with LF hashes
-  differently from the same file after a checkout. **`eas build:view <id>` is the only
-  authority**, and the number `eas update` prints must equal it. Never publish an update
-  because a local fingerprint "looked right".
-- ⚠️ **Builds and updates should be run from the SAME machine.** A build run from a Linux
-  cloud session and an update published from this Windows checkout can disagree for the
-  same reason.
+```bash
+cd mobile && npx eas-cli@latest fingerprint:compare --build-id <build id>
+```
 
-Delete this section the day the build ships and the channel is live again.
+⚠️ **Use `fingerprint:compare`, not `fingerprint:generate`.** `compare` prints the
+build's fingerprint and the local one side by side and names the differing source when
+they disagree; `generate` gives a number with nothing to check it against. Local
+`generate` measured THREE values for one commit on 2026-09-24 (`b8879267…`,
+`f046ecc5…`, `c5badda2…`) because this machine has `core.autocrlf=true`, so a file a
+tool wrote with LF hashes differently from the same file after a checkout. Both
+platforms were re-verified as matching on 2026-09-25.
+
+⚠️ **Builds and updates should be run from the SAME machine**, for the same reason: a
+build run in a Linux cloud session and an update published from this Windows checkout
+can disagree about identical source.
+
+⚠️ **THE FINGERPRINT DOES NOT SEE `mobile/plugins/android/ShareSave.kt`** — measured
+2026-09-25: editing that file left the Android runtime on `19e8d21e…`. That is the
+documented trap running backwards. The known one is "the fingerprint moved, so the
+update reaches nothing"; this one is **"the fingerprint did not move, so the update
+applies happily on top of a stale native share service."** A Kotlin fix therefore looks
+shipped, publishes without complaint, and changes nothing on the device until the next
+APK. Kotlin and Swift changes need a BUILD, always, and the fingerprint will not remind
+you.
+
+---
+
+## ▶ 1.0.12 FIELD TEST — two bugs, and only one of them can be fixed over the air
+
+Owner testing 1.0.12 on 2026-09-25.
+
+- [x] **Android announced `“null” is in your library`** — needs Android build 13, NOT an
+  OTA. `postSave` in `mobile/plugins/android/ShareSave.kt` read the title with
+  `optString("title", "")`, and **Android's `org.json` returns the literal string
+  `"null"` for a JSON null**: a JSON null is stored as the `JSONObject.NULL` sentinel,
+  which is not Java null, so the `""` fallback never fires and `String.valueOf(NULL)`
+  comes back. Fixed with `jsonText()`, which checks `isNull` first, on both the `title`
+  and the `detail` parse.
+  ⚠️ **Instagram was guaranteed to hit it.** The server has no title to give for
+  Instagram (its datacenter IP gets the login wall) and the NATIVE share path has no
+  device-side metadata fetch to make up for it — so the most-shared platform was the one
+  that always read as broken. With the fix it says "Your Instagram link is in your
+  library. The summary is being written."
+- [x] **The reminder time picker was invisible** — ships over the air. The six `07:00`
+  chips were the children of a `Row`, which gives its children whatever space is left
+  beside a `flex: 1` label: ~264dp on a 360dp phone, minus the label, for ~320dp of
+  chips. They ran off the card and the word "At" collapsed into a vertical sliver, so the
+  setting looked absent. Now full width under the toggle, the same shape as DAILY GOAL.
+  ⚠️ The row only exists **once the Reminders switch is on** — that is deliberate, not
+  the bug.
+- [ ] **A task has no time of its own, only a date** (`Todo.due_date` is `YYYY-MM-DD`).
+  So "remind me at 3pm about THIS task" is not possible today: there is one daily time
+  for the whole digest. Per-task times mean a backend column + migration, a time control
+  in the editor, and one notification per task instead of one per day — which is the
+  thing `services/todoDates.ts` deliberately avoids. Decide whether it is wanted before
+  building it.
+- [ ] **iOS silent shares still report no OUTCOME** — see the entry further down. The
+  pop arrives from the extension; the result cannot, because iOS hands the background
+  upload's completion to the containing app, which is not running. Unchanged by this
+  pass, and it needs ~100 lines of Swift in a `withAppDelegate` plugin that cannot be
+  tested without burning a build per attempt.
+
 
 ## 🔴 Launch blockers
 
