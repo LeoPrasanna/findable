@@ -116,11 +116,10 @@ Owner testing 1.0.12 on 2026-09-25.
   in the editor, and one notification per task instead of one per day — which is the
   thing `services/todoDates.ts` deliberately avoids. Decide whether it is wanted before
   building it.
-- [ ] **iOS silent shares still report no OUTCOME** — see the entry further down. The
-  pop arrives from the extension; the result cannot, because iOS hands the background
-  upload's completion to the containing app, which is not running. Unchanged by this
-  pass, and it needs ~100 lines of Swift in a `withAppDelegate` plugin that cannot be
-  tested without burning a build per attempt.
+- [x] **iOS silent shares now report the OUTCOME** — built 2026-09-25, needs an iOS
+  build to reach a device. See the entry further down for the mechanism; the short
+  version is that it needed no `withAppDelegate` plugin at all, because Expo already
+  forwards `handleEventsForBackgroundURLSession` to app-delegate subscribers.
 
 
 ## 🔴 Launch blockers
@@ -499,15 +498,53 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
   3. **Task reminders**: one digest per day at a chosen time on days that have something
      due, tapping opens the Slate (cold start included). Off by default; the permission is
      asked at the toggle, because Android 13+ gives you one good ask.
-- [ ] 👤 **iOS silent shares still cannot report SUCCESS OR FAILURE** — the one part of the
-  owner's request that is not done, and it is architectural rather than an oversight. The
-  Share Extension's upload is a background `URLSession`; iOS completes it after the
-  extension process is dead and delivers that completion to the **containing app** via
-  `application(_:handleEventsForBackgroundURLSessionIdentifier:)`. So the extension's
-  notification says "Saving…", never "Saved", and there is no second notification. Fixing
-  it properly means a `withAppDelegate` config plugin that recreates the session with a
-  delegate and posts the outcome — ~100 lines of Swift in a file Expo owns. Worth doing
-  once the current build is out and the softer wording has been tried in practice.
+- [~] **iOS silent shares report SUCCESS OR FAILURE** — written 2026-09-25 in
+  `mobile/modules/share-config/ios/ShareResultSubscriber.swift`. ⚠️ **Not testable until
+  an iOS build ships**; it is Swift.
+
+  The Share Extension's upload is a background `URLSession`, so iOS completes it after the
+  extension is dead and delivers that completion to the **containing app** via
+  `application(_:handleEventsForBackgroundURLSession:completionHandler:)`. The old plan
+  here was a `withAppDelegate` config plugin. **That was not needed** — `expo-modules-core`
+  already forwards this exact callback to app-delegate subscribers
+  (`ExpoAppDelegateSubscriberManager`), so the handler is an ordinary class in the local
+  `share-config` module plus one line of `expo-module.config.json`. Verified with
+  `npx expo-modules-autolinking resolve -p ios --json`, which lists
+  `share-config -> subscribers: ['ShareResultSubscriber']`.
+
+  It re-attaches to the session by the identifier iOS hands it, reads the response body
+  off the upload task, and posts the same two outcomes Android posts — plus a drawer
+  receipt, so a user who denied notifications still learns what happened. The extension
+  now also stashes the shared link under `findableShareLink.<session id>` in the App Group,
+  because a result has to name the platform and the request body is a temp file the system
+  has already consumed.
+
+  ⚠️ **Three limits, none of them bugs:**
+  1. **A force-quit app is not relaunched.** iOS suppresses background relaunch after the
+     user swipes an app away, so the outcome waits until they next open Findable. The
+     upload is unaffected — the system owns it.
+  2. **Two drawer receipts per silent share** ("Saving…" from the extension, then the
+     result). Kept on purpose: if iOS defers the relaunch for hours, the first receipt is
+     the only record that exists.
+  3. **iOS's completion handler will not actually fire**, and it is not our fault.
+     `expo-file-system` registers `FileSystemBackgroundSessionHandler` for the same
+     selector and only invokes the handler it was given when one of ITS sessions finishes;
+     Expo's manager waits for every subscriber, so the count never reaches zero. Costs a
+     background-launch courtesy; does not affect the notification. Do not go hunting for
+     that bug in our file — there is a comment there saying the same thing.
+
+  ⚠️ **MERGING THIS FREEZES BOTH OTA CHANNELS, not just iOS.** Measured 2026-09-25:
+  the iOS fingerprint moves `6deee3ef…` → `78668ed0…` (expected — new Swift), and the
+  ANDROID one moves `19e8d21e…` → `7bc363b6…` as well, because `withInvisibleShareIOS.js`
+  is a config-plugin file and those are hashed for every platform regardless of what they
+  contain. So this sits on branch `feat/ios-share-outcome` until an iOS build is actually
+  wanted; merging it early would cost the ability to push JS fixes to the Android build 13
+  that was just installed. ⚠️ Also in mobile/AGENTS.md.
+
+  ⚠️ **The notification wording now exists in FOUR processes** (`services/shareNotice.ts`,
+  `plugins/android/ShareSave.kt`, the extension's Swift, and this subscriber). None can
+  call the others. When a string or a platform changes, all four change in one native
+  build. The Threads label already fell a week behind once this way.
 - **Notifications deliberately NOT added** (considered 2026-09-24, so they are not
   relitigated): *summary ready* — needs server push, which needs tokens, a sender and a
   privacy-policy change, for an event the user is not waiting on; *save-cap warnings* —

@@ -35,6 +35,18 @@ So a fingerprint that matches proves the update will REACH the build. It proves
 nothing about whether the native half of your change is in it. **Kotlin and Swift
 changes need an APK/IPA, always**, and nothing will warn you.
 
+# ⚠️ AND A CONFIG PLUGIN FREEZES BOTH PLATFORMS
+
+`plugins/withInvisibleShareIOS.js` is iOS-only by name and by content. Editing it
+moved the **ANDROID** runtime as well (`19e8d21e…` → `7bc363b6…`, measured
+2026-09-25) — config-plugin files are hashed for every platform, because the
+fingerprint cannot know which parts of a plugin apply where.
+
+So touching one line of an iOS plugin blocks Android OTAs until an Android build
+ships. Check `fingerprint:compare` against **both** installed builds before
+assuming a change is OTA-safe, and prefer keeping native-adjacent work on a
+branch until you actually intend to build.
+
 ---
 
 # Expo HAS CHANGED
