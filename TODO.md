@@ -56,7 +56,12 @@ over. The `preview` channel now serves:
 | Platform | Runtime version | Build |
 |---|---|---|
 | iOS | `6deee3ef90d4fae6547ba9cb0985985127e0bc82` | 1.0.12 (TestFlight) |
-| Android | `19e8d21e48a0129d4a7e8ca8f6f82de42d277bcd` | build 12 (APK) |
+| Android | `19e8d21e48a0129d4a7e8ca8f6f82de42d277bcd` | build 12 **and 13** (APK) |
+
+⚠️ **Build 13 shares build 12's runtime.** `autoIncrement` bumps `versionCode`, and
+`versionCode` is NOT in the fingerprint (`appVersionSource: remote`, so it is not even in
+app.json) — measured 2026-09-25. One update therefore serves both builds, which is the
+only reason the channel survived that build.
 
 Before every `eas update`, confirm the local project still computes those two:
 
@@ -91,8 +96,9 @@ you.
 
 Owner testing 1.0.12 on 2026-09-25.
 
-- [x] **Android announced `“null” is in your library`** — needs Android build 13, NOT an
-  OTA. `postSave` in `mobile/plugins/android/ShareSave.kt` read the title with
+- [x] **Android announced `“null” is in your library`** — fixed, shipped in Android
+  build 13, and **confirmed working on device by the owner 2026-10-04**. It needed a
+  build, not an OTA. `postSave` in `mobile/plugins/android/ShareSave.kt` read the title with
   `optString("title", "")`, and **Android's `org.json` returns the literal string
   `"null"` for a JSON null**: a JSON null is stored as the `JSONObject.NULL` sentinel,
   which is not Java null, so the `""` fallback never fires and `String.valueOf(NULL)`
@@ -220,9 +226,10 @@ Owner testing 1.0.12 on 2026-09-25.
      ID, not per environment.
   ⚠️ **Guideline 4.8 binds at iOS review, not on Android** — Google-only is fine for the
   Android builds; an iOS build must not ship with Google present and Apple absent.
-- [~] 🔴 **Share sheet — Phase B (invisible Android share).** Built 2026-08-13 on
-  `feat/android-invisible-share`; **never compiled or run** — no Android SDK on the dev
-  box, so it needs an EAS build to confirm. A translucent `ShareActivity` (config plugin
+- [x] 🔴 **Share sheet — Phase B (invisible Android share).** Built 2026-08-13 on
+  `feat/android-invisible-share`, and **confirmed on device by the owner** — silent share
+  from Instagram stays in Instagram, the save lands, and the result notification names the
+  reel (builds 12 and 13, 2026-09-24 → 10-04). A translucent `ShareActivity` (config plugin
   `mobile/plugins/withInvisibleShare.js` + one Kotlin file) receives `ACTION_SEND`, hands
   the URL to a foreground service and finishes, so the app never flashes.
   ⚠️ Auth uses a **save-scoped share key** (`backend/app/sharekey.py`), not a mirrored
@@ -231,17 +238,18 @@ Owner testing 1.0.12 on 2026-09-25.
   snapshots are load-bearing: without them a Pro user's silent share is entitled as free
   and charges a different daily bucket. ⚠️ Costs a `FOREGROUND_SERVICE_DATA_SYNC`
   declaration in the Play Console at launch.
-- [~] 🔴 **Share sheet — Phase A (iOS).** Android done 2026-08-12 (`expo-share-intent@7`
-  wired in `mobile/app/_layout.tsx`). iOS needs only a Mac/Xcode build — the package
-  covers both platforms. ⚠️ **A native module cannot ship by OTA**: SaveHere appears in
-  the share sheet only after the next EAS build is installed.
+- [x] 🔴 **Share sheet — Phase A (iOS).** Android 2026-08-12, iOS verified on device
+  2026-09-13 (`expo-share-intent@7`, wired in `mobile/app/_layout.tsx`). ⚠️ The rule it
+  taught stands: **a native module cannot ship by OTA** — Findable appears in the share
+  sheet only after an EAS build is installed.
 
 ---
 
 ## iOS share — invisible, like Android
 
-- [~] 🔴 **iOS Share Extension saves without opening the app.** Re-enabled 2026-09-10
-  after four builds. ⚠️ **`./plugins/withInvisibleShareIOS` MUST be listed BEFORE
+- [x] 🔴 **iOS Share Extension saves without opening the app.** Re-enabled 2026-09-10
+  after four builds, owner-verified on device 2026-09-13 (see below). The traps are kept
+  because every one of them cost a build slot. ⚠️ **`./plugins/withInvisibleShareIOS` MUST be listed BEFORE
   `expo-share-intent` in `app.json` — that looks backwards and is not.**
   `@expo/config-plugins` runs mods in **reverse** registration order
   (`withMod.js:199` runs this plugin's action, *then* `nextMod`), and
@@ -536,7 +544,6 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
 
 - [ ] **Deep linking** — `savehere://reel/{id}` so a share-extension save opens the
   detail screen directly.
-- [ ] **To-do reminders** — local notification the evening before / morning of a due date.
 - [ ] **Archive as a softer alternative to delete-on-completion.**
 - [ ] **Activity grid + streak.** `todos.completed_at` is already recorded, so the data
   exists.
