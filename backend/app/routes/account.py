@@ -109,6 +109,18 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
         "returning": _is_returning(user, db),
         "trial_ends_at": ent.trial_ends_at.isoformat() + "Z" if ent.trial_ends_at else None,
         "saves": {"used": saves_used, "limit": ent.save_limit},   # limit null = unlimited
+        # What this account drops to when the trial ends.
+        #
+        # ⚠️ SENT BECAUSE THE CLIENT KEPT GETTING IT WRONG. ProfilePanel told every
+        # trial user they would drop to "20 saves" — the free cap until 2026-09-11,
+        # when it became 50. A hardcoded number in the client disagrees with the
+        # server the first time the server changes, and this one was a wrong PROMISE
+        # shown to every new user for weeks. Both numbers are env-overridable
+        # (render.yaml), so there is no version of this the client can safely guess.
+        "after_trial": {
+            "save_limit": settings.FREE_SAVE_LIMIT,
+            "ai_limit": settings.AI_FREE_DAILY_LIMIT,
+        },
         # Whole-library distinct counts for the profile stat cards (authoritative,
         # unfiltered — not derived from whatever page the client happens to hold).
         "categories": categories,

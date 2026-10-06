@@ -146,6 +146,25 @@ def save_reel(body: ReelSaveRequest,
     if ent.save_limit is not None:
         saved = db.query(ReelDB).filter(ReelDB.user_id == user.id).count()
         if saved >= ent.save_limit:
+            # ⚠️ A LIBRARY CAN SIT WELL ABOVE ITS CAP, AND "DELETE A SAVE" IS
+            # THEN A LIE THAT LOOPS. The trial allows PRO_SAVE_LIMIT; when it
+            # expires the same library is measured against FREE_SAVE_LIMIT, so
+            # someone who saved 200 reels in their 10 trial days wakes up 150 over.
+            # Telling them to "delete a save to make room" sends them round a loop
+            # — delete one, retry, same message — and the obvious conclusion is
+            # that the app is broken. It is also the exact moment we are asking
+            # them to pay, which is the worst possible time to look broken.
+            over = saved - ent.save_limit + 1   # +1: room for THIS save
+            room = (
+                f"Delete {over} saves to make room."
+                if over > 1
+                else "Delete a save to make room."
+            )
+            upsell = (
+                ""
+                if ent.tier == "pro"
+                else f" Or Pro raises the cap to {settings.PRO_SAVE_LIMIT}."
+            )
             raise HTTPException(
                 status_code=403,
                 # ⚠️ THE UPSELL IS TIER-AWARE, and must stay that way. Pro
@@ -154,11 +173,8 @@ def save_reel(body: ReelSaveRequest,
                 # the one message guaranteed to read as a bug. Free and trial
                 # get the upgrade line because for them it is simply true.
                 detail=(
-                    f"Your library is full ({ent.save_limit} saves). "
-                    + ("Delete a save to make room."
-                       if ent.tier == "pro"
-                       else f"Delete a save to make room — or Pro raises this to "
-                            f"{settings.PRO_SAVE_LIMIT}.")
+                    f"Your library holds {saved} saves and your plan allows "
+                    f"{ent.save_limit}. {room}{upsell}"
                 ),
             )
 

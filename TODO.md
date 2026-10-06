@@ -282,6 +282,33 @@ Owner testing 1.0.12 on 2026-09-25.
   when it became 50/500. Keep them that way.
   The upsell is **tier-aware** in both places (server 403 and client alert):
   free is offered Pro, trial and pro are not, because they already hold 500.
+- [x] **The trial→free cliff said the wrong thing, and it said it at the till**
+  (owner spotted it, 2026-10-06: *"if he/she save more than 50 and after end of trial
+  period, then logic fails right?"*). **The gate itself was always right** — the cap
+  is enforced on NEW saves only, so nothing is deleted and the library stays fully
+  usable. Three messages around it were wrong:
+  - **Everything said "delete a few", which could be wrong by 150.** The trial allows
+    `PRO_SAVE_LIMIT` (500); the day it expires the same library is measured against
+    `FREE_SAVE_LIMIT` (50). Ten enthusiastic days at 200 saves leaves someone 151
+    over, and "Delete a save to make room" sent them round a loop — delete one, retry,
+    read the identical sentence, conclude the app is broken. ⚠️ **At the exact moment
+    we are asking them to pay.** The 403 and `saveQuota` now compute `toDelete`
+    (`used - limit + 1`, the +1 being room for THIS save) and name the number.
+  - **`"200/50"` read as a rendering bug**, so the over-cap line is a sentence now:
+    "200 saves kept, 50 allowed — delete 151 to save again." Exactly-full keeps its
+    old `50/50` wording, which was never wrong.
+  - ⚠️ **ProfilePanel promised trial users "20 saves"** — hardcoded, and 20 stopped
+    being the free cap on 2026-09-11 when it became 50. A wrong PROMISE, in the one
+    sentence that explains what happens when the trial ends, shown to every new user
+    for three weeks. `/usage` now sends `after_trial: {save_limit, ai_limit}` and the
+    client renders what it is told. **Both limits are env-overridable in
+    `render.yaml`, so there is no version of this a client can safely guess** — the
+    same rule `saveQuota.ts` has always stated about ratios.
+  - A trial user already over the post-trial cap is now warned before the cliff
+    rather than after it.
+  - Covered by `test_over_cap_is_told_how_many_to_delete`,
+    `test_usage_tells_the_client_the_post_trial_numbers` and the new over-cap cases in
+    `saveQuota.test.ts`. 355 backend tests pass.
 - [x] **The `FREE_SAVE_LIMIT=500` override is GONE** (owner, 2026-09-13). Staging now
   runs the real numbers: **free 50, pro 500**, both stated explicitly in `render.yaml`
   rather than inherited from `config.py`. ⚠️ **A free account that reaches 50 now gets a

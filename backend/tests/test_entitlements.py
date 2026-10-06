@@ -220,9 +220,52 @@ class TestSaveCap:
         _seed_reels(Session, "u-cap", 20)
         r = c.post("/api/reels/save", json={"url": "https://youtube.com/shorts/newone123"})
         assert r.status_code == 403
-        assert "full" in r.json()["detail"]
+        detail = r.json()["detail"]
+        # Both numbers, stated. The old wording was "Your library is full (20 saves)",
+        # which cannot express a library that is OVER its cap — see the next test.
+        assert "20 saves" in detail and "allows 20" in detail
+        assert "Delete a save" in detail
         # Free users DO get the upgrade line — for them it is simply true.
-        assert "Pro" in r.json()["detail"]
+        assert "Pro" in detail
+
+    def test_over_cap_is_told_how_many_to_delete(self, env, monkeypatch):
+        """The end of a trial produces a library ABOVE its cap, and "delete a save"
+        is then a lie that loops.
+
+        The trial allows PRO_SAVE_LIMIT; the day it expires the same library is
+        measured against FREE_SAVE_LIMIT. Someone who saved 200 reels in ten
+        enthusiastic days is 150 over, and the old message told them to delete ONE —
+        so they would delete one, retry, read the identical sentence, and conclude the
+        app was broken. At the exact moment we ask them to pay.
+        """
+        client, Session = env
+        monkeypatch.setattr(settings, "FREE_SAVE_LIMIT", 20)
+        monkeypatch.setattr(settings, "PRO_SAVE_LIMIT", 500)
+        user = AuthUser(id="u-over", email="over@b.co")
+        c = client(user)
+        c.get("/api/account/usage")
+        _backdate_trial(Session, "u-over", days=11)
+        _seed_reels(Session, "u-over", 50)      # 30 over a cap of 20
+        r = c.post("/api/reels/save", json={"url": "https://youtube.com/shorts/overcap1"})
+        assert r.status_code == 403
+        detail = r.json()["detail"]
+        assert "50 saves" in detail and "allows 20" in detail
+        # 50 - 20 + 1: the +1 is room for THIS save, not merely reaching the cap.
+        assert "Delete 31 saves" in detail
+        assert "Delete a save to make room" not in detail
+
+    def test_usage_tells_the_client_the_post_trial_numbers(self, env, monkeypatch):
+        """ProfilePanel hardcoded "20 saves" and it stopped being true on 2026-09-11.
+
+        Both limits are env-overridable, so the client cannot safely guess either —
+        and the one it guessed wrong was a PROMISE shown to every trial user.
+        """
+        client, Session = env
+        monkeypatch.setattr(settings, "FREE_SAVE_LIMIT", 37)
+        monkeypatch.setattr(settings, "AI_FREE_DAILY_LIMIT", 4)
+        c = client(AuthUser(id="u-after", email="after@b.co"))
+        body = c.get("/api/account/usage").json()
+        assert body["after_trial"] == {"save_limit": 37, "ai_limit": 4}
 
     def test_deleting_below_cap_reopens_saving(self, env, monkeypatch):
         client, Session = env

@@ -29,11 +29,23 @@ export interface SaveQuota {
   used: number;
   limit: number;
   remaining: number;
+  /**
+   * How many saves must go before saving works again. 0 unless the library is at or
+   * over the cap.
+   *
+   * ⚠️ THIS EXISTS BECAUSE A LIBRARY CAN SIT WELL ABOVE ITS CAP. The trial allows
+   * 500; when it expires the same library is measured against 50, so someone who
+   * saved 200 reels in their 10 trial days is 151 over. Every message here used to
+   * say "delete a few", which for them was wrong by 150 and sent them round a loop:
+   * delete one, retry, identical message, conclude the app is broken. It is also the
+   * exact moment we ask them to pay.
+   */
+  toDelete: number;
   /** One line, already written. Empty at 'ok'. */
   message: string;
 }
 
-const OK: SaveQuota = { level: 'ok', used: 0, limit: 0, remaining: 0, message: '' };
+const OK: SaveQuota = { level: 'ok', used: 0, limit: 0, remaining: 0, toDelete: 0, message: '' };
 
 /**
  * @param used  saves currently in the library
@@ -45,8 +57,18 @@ export function saveQuota(used: number | null | undefined, limit: number | null 
 
   const remaining = Math.max(0, limit - used);
   const ratio = used / limit;
-  const base = { used, limit, remaining };
+  // +1 because room is needed for the NEXT save, not merely to reach the cap.
+  const toDelete = used >= limit ? used - limit + 1 : 0;
+  const base = { used, limit, remaining, toDelete };
 
+  if (used > limit) {
+    // Over, not merely full. "${used}/${limit}" reads as a rendering bug at 200/50,
+    // so this states the two numbers as a sentence and names the real action.
+    return {
+      ...base, level: 'full',
+      message: `${used} saves kept, ${limit} allowed — delete ${toDelete} to save again.`,
+    };
+  }
   if (used >= limit) {
     return {
       ...base, level: 'full',

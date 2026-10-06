@@ -181,6 +181,11 @@ export interface Usage {
   tier: 'trial' | 'free' | 'pro';
   trial_ends_at: string | null;                    // ISO UTC; null for pro
   saves: { used: number; limit: number | null };   // limit null = unlimited
+  /** What this account drops to when the trial ends. ⚠️ SERVER-SENT ON PURPOSE —
+   *  ProfilePanel used to hardcode "20 saves", which stopped being true on
+   *  2026-09-11 and was a wrong promise shown to every trial user until 2026-10-06.
+   *  Both numbers are env-overridable, so the client cannot safely guess either. */
+  after_trial?: { save_limit: number; ai_limit: number };
   categories?: number; // distinct categories across the whole library
   platforms?: number;  // distinct platforms across the whole library
   used: number;        // AI actions spent today

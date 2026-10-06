@@ -81,8 +81,13 @@ export default function HomeScreen() {
     // paying feels like — telling either that "Pro holds 500" offers them the
     // number they are already sitting on, which reads as a bug, not an offer.
     const upsell = usage?.tier === 'free' ? ' Pro holds 500.' : '';
+    // ⚠️ "DELETE A FEW" IS WRONG BY 150 FOR AN EX-TRIAL USER. The trial cap is
+    // 500 and the free cap is 50, so a library built during the trial can be far
+    // over the line the day it expires — see toDelete in services/saveQuota.ts.
     const body = quota.level === 'full'
-      ? `You’ve used all ${quota.limit} saves. Delete a few from your library and saving starts working again — nothing you’ve kept is locked.${upsell}`
+      ? (quota.toDelete > 1
+        ? `Your library holds ${quota.used} saves and your plan allows ${quota.limit}. Delete ${quota.toDelete} and saving starts working again — nothing you’ve kept is locked, and you choose what goes.${upsell}`
+        : `You’ve used all ${quota.limit} saves. Delete a few from your library and saving starts working again — nothing you’ve kept is locked.${upsell}`)
       : `${quota.used} of ${quota.limit} saves used, so there’s room for ${quota.remaining} more. Deleting anything you’re done with frees the space straight away.${upsell}`;
     if (Platform.OS === 'web') window.alert(`${title}
 
