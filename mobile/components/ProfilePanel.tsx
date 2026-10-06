@@ -423,14 +423,29 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                   <Body style={styles.hint}>{resumesAtSentence(usage.resets_at)}</Body>
                 )}
 
-                {usage.tier === 'trial' && usage.trial_ends_at && (
+                {/* ⚠️ THESE TWO NUMBERS CAME FROM THE SERVER AFTER THIS LINE LIED.
+                    It read "3 AI actions a day and 20 saves" — hardcoded, and 20
+                    stopped being the free cap on 2026-09-11 when it became 50. So
+                    every trial user was promised a smaller library than they would
+                    actually get, for weeks, in the one sentence that explains what
+                    happens when they stop paying attention. Both limits are
+                    env-overridable (render.yaml), so the client cannot safely guess
+                    either; `after_trial` is sent by /usage for exactly this. */}
+                {usage.tier === 'trial' && usage.trial_ends_at && usage.after_trial && (
                   <Body style={styles.hint}>
-                    Trial — {trialDaysLeft(usage.trial_ends_at)} left, then 3 AI actions a day and 20 saves.
+                    Trial — {trialDaysLeft(usage.trial_ends_at)} left, then{' '}
+                    {usage.after_trial.ai_limit} AI actions a day and {usage.after_trial.save_limit} saves.
+                    {usage.saves.used > usage.after_trial.save_limit
+                      ? ` You have ${usage.saves.used} saves, so you’ll be over that — nothing is deleted, but new saves pause until you free up room or go Pro.`
+                      : ''}
                   </Body>
                 )}
                 {usage.tier === 'free' && usage.saves.limit != null && (
                   <Body style={styles.hint}>
-                    Saves used: {usage.saves.used} of {usage.saves.limit}. Pro unlocks more.
+                    {usage.saves.used > usage.saves.limit
+                      /* "200 of 50" reads as a bug. Say it as a sentence instead. */
+                      ? `${usage.saves.used} saves kept, ${usage.saves.limit} allowed — delete ${usage.saves.used - usage.saves.limit + 1} to save again, or Pro raises the cap.`
+                      : `Saves used: ${usage.saves.used} of ${usage.saves.limit}. Pro unlocks more.`}
                   </Body>
                 )}
                 <Rule style={{ marginTop: spacing.md }} />

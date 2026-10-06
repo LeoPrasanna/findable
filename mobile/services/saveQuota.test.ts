@@ -49,4 +49,29 @@ assert.equal(saveQuota(undefined, undefined).level, 'ok');
 assert.equal(saveQuota(5, 0).level, 'ok');
 assert.equal(saveQuota(0, 50).message, '');
 
+/**
+ * A library ABOVE its cap, which is what the end of a trial produces.
+ *
+ * The trial allows 500 and free allows 50, so ten enthusiastic days can leave someone
+ * 150 over the line on day eleven. Every message here used to say "delete a few",
+ * which was wrong by 150 and looped: delete one, retry, identical message.
+ */
+assert.equal(saveQuota(200, 50).level, 'full', 'over the cap is still full');
+assert.equal(saveQuota(200, 50).remaining, 0, 'never negative');
+// +1 because room is needed for the NEXT save, not merely to reach the cap.
+assert.equal(saveQuota(200, 50).toDelete, 151, 'counts the overage plus one');
+assert.equal(saveQuota(50, 50).toDelete, 1, 'exactly full needs one gone');
+assert.equal(saveQuota(49, 50).toDelete, 0, 'under the cap needs nothing');
+assert.equal(saveQuota(0, 50).toDelete, 0);
+assert.equal(saveQuota(null, 50).toDelete, 0, 'unknown is not an overage');
+
+// "200/50" reads as a rendering bug, so the over-cap line is a sentence instead.
+assert.doesNotMatch(saveQuota(200, 50).message, /200\/50/, 'no x/y when over');
+assert.match(saveQuota(200, 50).message, /151/, 'says how many must go');
+// Exactly-full keeps its original wording, which was never wrong.
+assert.match(saveQuota(50, 50).message, /50\/50/);
+
+// The no-upsell rule still holds in the new branch.
+assert.doesNotMatch(saveQuota(200, 50).message, /pro|upgrade|subscri/i, 'upsell leaked when over');
+
 console.log('saveQuota: ok');
