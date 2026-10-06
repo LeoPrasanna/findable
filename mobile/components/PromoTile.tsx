@@ -37,11 +37,16 @@ interface Props {
   card: PromoCard;
   onPress: () => void;
   onDismiss: () => void;
+  /** Which promo slot this is, so the grid can tell one tile's box from another's. */
+  slot: number;
+  /** Reports this tile's box inside the scroll content, for the haptic that fires when
+   *  it comes into view. The grid owns that decision — see promoInView(). */
+  onMeasure?: (slot: number, y: number, h: number) => void;
 }
 
 const M = PROMO_MOTION[PROMO_INTENSITY];
 
-function PromoTileInner({ card, onPress, onDismiss }: Props) {
+function PromoTileInner({ card, onPress, onDismiss, slot, onMeasure }: Props) {
   /**
    * ⚠️ REDUCE MOTION IS HONOURED, AND IT IS NOT NEGOTIABLE WITH THE BRIEF. A sweeping,
    * pulsing tile is exactly the content that triggers nausea and migraine for people
@@ -109,7 +114,13 @@ function PromoTileInner({ card, onPress, onDismiss }: Props) {
   const lift = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, M.liftTo] });
 
   return (
-    <Animated.View style={{ transform: [{ scale: still ? 1 : lift }] }}>
+    <Animated.View
+      style={{ transform: [{ scale: still ? 1 : lift }] }}
+      /* `layout.y` is relative to this tile's column, and the columns start at the
+         top of the scroll content, so it is usable as a content offset directly. The
+         few points of list padding above it are far inside SEEN_MARGIN. */
+      onLayout={e => onMeasure?.(slot, e.nativeEvent.layout.y, e.nativeEvent.layout.height)}
+    >
       <Pressable
         style={styles.frame}
         onPress={onPress}

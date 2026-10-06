@@ -58,26 +58,19 @@ const MAX_PROMOS = 6;
  * HOW HARD THE TILE SHOUTS. Owner asked for "flashy and animated and moving... may be
  * bit annoyingly" (2026-10-06).
  *
- * ⚠️ IT SHIPS AT 'lively', NOT 'loud', AND THAT IS A DELIBERATE DISAGREEMENT WITH
- * THE BRIEF. A tile engineered to annoy destroys the only thing this slot is for. The
- * dismiss rate is the measurement — whether promoted inventory is tolerable in a grid
- * of the user's own saves — and if the tile is deliberately irritating then the
- * dismiss rate measures the ANIMATION, not the format. You learn "annoying things
- * annoy people", which nobody needed an OTA to find out, and you lose the number that
- * would have told you whether to buy an ad SDK at all.
+ * It shipped at 'lively' first and that was wrong on a real device — the owner's words
+ * were "very very subtle" (2026-10-06). A sheen tuned on a desk reads as nothing at all
+ * in a hand, on a bright screen, in a grid of photographs. So it is now 'loud'.
  *
- * It is also the wrong trade against the product: the library is the screen people
- * open to find something they saved, and a shouting tile in the middle of it trains
- * them to stop opening it. That costs the saves, the AI actions and the subscription,
- * to win a few taps on a house ad.
- *
- * So: 'lively' is visibly animated — a sheen sweep, a breathing accent edge, a tile
- * that moves. **Set this to 'loud' and it gets faster, bigger and harder to ignore,
- * which is one word and one OTA away if the owner still wants it.** Both are honest
- * positions; this file records which one shipped and why.
+ * ⚠️ WHAT 'loud' COSTS, SO THE NEXT PERSON CAN WEIGH IT. The dismiss rate is this
+ * slot's only measurement — whether promoted inventory is tolerable in a grid of the
+ * user's OWN saves. The louder the tile, the more that number measures the ANIMATION
+ * rather than the format, and the format question is the one worth an ad SDK. If
+ * dismissals come in high, 'calm' is one word away and worth trying before concluding
+ * that promoted tiles don't work here.
  */
 export type PromoIntensity = 'calm' | 'lively' | 'loud';
-export const PROMO_INTENSITY: PromoIntensity = 'lively';
+export const PROMO_INTENSITY: PromoIntensity = 'loud';
 
 /** Durations and amplitudes per level. Shorter sweep + bigger pulse = louder. */
 export const PROMO_MOTION: Record<PromoIntensity, {
@@ -195,6 +188,45 @@ export function promoSlots(
     out.push(i);
   }
   return out;
+}
+
+/** How much of a promoted tile must actually be on screen before it counts as seen.
+ *  A tile peeking one pixel over the fold has not been "come across". */
+const SEEN_MARGIN = 48;
+
+/**
+ * Which promoted tile has just come into view and not yet been felt, or null.
+ *
+ * ⚠️ THE GRID IS A ScrollView, NOT A FlatList, so there is no
+ * `onViewableItemsChanged` to lean on — see the long note at the mosaic in
+ * app/index.tsx. Each promo tile reports its own box from `onLayout` and this decides
+ * visibility from the scroll offset. Pure and here rather than inline in the scroll
+ * handler so the off-by-one that would buzz on an off-screen tile is a test failure
+ * instead of a phone buzzing in someone's pocket.
+ *
+ * ⚠️ IT RETURNS AT MOST ONE. Two tiles can enter the viewport in the same frame on a
+ * fast fling, and two overlapping double-pulses are a rattle, not a signal.
+ */
+export function promoInView(
+  boxes: ReadonlyMap<number, { y: number; h: number }>,
+  seen: ReadonlySet<number>,
+  scrollY: number,
+  viewportH: number,
+): number | null {
+  if (!(viewportH > 0)) return null;
+  const top = scrollY;
+  const bottom = scrollY + viewportH;
+  let found: number | null = null;
+  for (const [slot, box] of boxes) {
+    if (seen.has(slot)) continue;
+    // Overlap on both edges, so it fires whichever direction the user arrived from.
+    if (box.y + box.h - SEEN_MARGIN <= top) continue;
+    if (box.y + SEEN_MARGIN >= bottom) continue;
+    // Lowest slot number wins: on a fling that reveals several, the first one the
+    // user passed is the one they are looking at.
+    if (found === null || slot < found) found = slot;
+  }
+  return found;
 }
 
 /** A stored dismissal timestamp, validated. Junk in storage must read as "never

@@ -99,4 +99,41 @@ assert.equal(readDismissed(String(NOW - 500), NOW), NOW - 500, 'a real timestamp
 // A clock that moved backwards would otherwise strand the slot in the future forever.
 assert.equal(readDismissed(String(NOW + 999_999), NOW), NOW, 'future is clamped to now');
 
+/**
+ * ── WHEN THE TILE BUZZES ─────────────────────────────────────────────────────
+ * A haptic that fires for an off-screen tile is a phone vibrating in a pocket for no
+ * visible reason, which is indistinguishable from a bug. These are the cheap version
+ * of that bug report.
+ */
+import { promoInView } from './promoSlot.ts';
+
+const VIEW = 800;                       // viewport height
+const boxes = new Map([
+  [0, { y: 1200, h: 300 }],
+  [1, { y: 4000, h: 300 }],
+]);
+const none = new Set<number>();
+
+assert.equal(promoInView(boxes, none, 0, VIEW), null, 'far below the fold stays quiet');
+assert.equal(promoInView(boxes, none, 1000, VIEW), 0, 'scrolled to it');
+assert.equal(promoInView(boxes, none, 1400, VIEW), 0, 'still on screen a bit further down');
+assert.equal(promoInView(boxes, none, 2000, VIEW), null, 'scrolled past it');
+assert.equal(promoInView(boxes, none, 3500, VIEW), 1, 'the second one, later');
+
+// Peeking is not seeing: SEEN_MARGIN is 48, so 40px of tile showing must not fire.
+assert.equal(promoInView(boxes, none, 1200 - VIEW + 40, VIEW), null, 'peeking at the bottom edge');
+assert.equal(promoInView(boxes, none, 1200 - VIEW + 60, VIEW), 0, 'properly on screen');
+assert.equal(promoInView(boxes, none, 1500 - 40, VIEW), null, 'peeking at the top edge on the way back');
+
+// Once per tile — the caller records it and we must never offer it again.
+assert.equal(promoInView(boxes, new Set([0]), 1000, VIEW), null, 'already felt');
+
+// A fling that reveals both at once gets ONE buzz, the earlier tile.
+const tight = new Map([[0, { y: 1000, h: 300 }], [1, { y: 1400, h: 300 }]]);
+assert.equal(promoInView(tight, none, 900, VIEW), 0, 'at most one, the first passed');
+
+// Degenerate inputs: a layout event can arrive before the ScrollView has a height.
+assert.equal(promoInView(boxes, none, 1000, 0), null, 'no viewport yet');
+assert.equal(promoInView(new Map(), none, 1000, VIEW), null, 'nothing measured yet');
+
 console.log('promoSlot: ok');
