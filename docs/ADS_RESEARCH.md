@@ -79,6 +79,14 @@ cap, `_MAX_TOKENS = 400`, Haiku at $1/$5 per MTok): **~$0.0026 typical,
 *(eCPM ranges from published 2026 benchmarks, which skew gaming; non-gaming runs
 20–30% lower. Estimated, not measured for our app.)*
 
+**The strongest argument FOR ads, which the rest of this file under-sells: ads are
+paid by the ~98% who will never subscribe.** A 2% conversion at 1,000 MAU is 20
+subscribers; the other 980 people cost tokens and bandwidth and return nothing. In-feed
+ads are the only mechanism in the product that earns anything from them, and at
+India-weighted eCPM they earn **about the same per month as Pro does at 2%** (see the
+scenario table below). They are not a rounding error next to the subscription — they are
+the same order of magnitude, from a completely different population, and they stack.
+
 **But unit economics are the wrong lens at our scale.** AdMob pays out at a
 **$100 threshold**. At 1,000 MAU with 20% watching one rewarded ad a week, that
 is ~800 impressions/month ≈ **$8/month** — over a year to get paid once. The
@@ -131,3 +139,136 @@ revenue isn't small, it's functionally zero.
 The entitlement gate already exists. **Sell Pro.** If nobody pays for unlimited
 AI actions, nobody will watch an ad for one either — and that costs no build,
 no SDK and no privacy rewrite to find out.
+
+---
+
+# Addendum 2026-10-06 — owner direction: NON-TRACKING, Pinterest-style, free tier only
+
+Owner: *"i want to introduce ads (non tracking) for free tier, its like Pinterest
+style ads."* Recorded so the shape is not re-litigated. **The store blocker above is
+unchanged and is not about tracking** — AdMob will not serve an app that is not
+publicly downloadable, so nothing can be connected before launch whatever the ad type.
+
+## What "non-tracking" actually changes
+
+**Cheaper:**
+- **No ATT prompt on iOS**, and App Store privacy answers become "Data Used to Track
+  You: No" — which is the single biggest privacy-questionnaire difference.
+- No IDFA, so no "limited to users who opted in" revenue cliff.
+
+**NOT cheaper — these survive non-personalization:**
+- The Google Mobile Ads SDK still **auto-merges `AD_ID` into the Android manifest**.
+  Removing it is an explicit `tools:node="remove"` in the manifest, not a default.
+- **Play data-safety still needs a disclosure** for what the SDK collects.
+- **EEA/UK/CH still legally require a certified CMP** (UMP SDK). Consent is about
+  storing and reading on the device, not about personalization — switching ads to
+  non-personalized does not remove it.
+- `site/privacy.html` still needs an advertising processor row.
+
+**And it costs revenue.** Non-personalized inventory clears materially below
+personalized — commonly 30–50% lower eCPM. So non-tracking moves every number in the
+table above **down**, not up. That is the trade, and it is a defensible one; it is just
+not a cheaper way to do ads.
+
+## In-feed is a different economic question from rewarded — and better
+
+The rewarded analysis above does not transfer: in-feed native is low-value per
+impression but **high volume**, where rewarded is the reverse. ⚠️ **Estimated, not
+measured** (our own eCPM is unknown until we serve):
+
+| At 1,000 MAU, ~80% free | Impressions/mo | NPA native eCPM | Revenue/mo |
+|---|---|---|---|
+| India / emerging-weighted | ~70,000 | $0.20–0.60 | **~$15–40** |
+| US / tier-1-weighted | ~70,000 | $1.50–3.00 | ~$100–210 |
+
+So in-feed **can** clear AdMob's $100 payout threshold inside a month in tier-1 geos,
+which rewarded could not. The India-weighted row is the one to plan against.
+
+## Set against what a free user actually costs — PER USER, not in aggregate
+
+⚠️ **An earlier version of this section said ads cover "roughly a tenth" of the free
+tier's AI cost. That compared ad revenue against the CEILING — every free user doing
+all 3 AI actions every single day — which no cohort does.** Per user per month, with
+`AI_FREE_DAILY_LIMIT=3` and ~$0.004 an action:
+
+| Free user's AI usage | Token cost | Ad revenue, India | Ad revenue, tier-1 |
+|---|---|---|---|
+| Ceiling: 3/day, every day (90) | $0.36 | $0.02–0.05 | $0.13–0.26 |
+| Moderate: 3/day, 10 days (30) | $0.12 | $0.02–0.05 | $0.13–0.26 |
+| Light: ~10 actions | $0.04 | $0.02–0.05 | $0.13–0.26 |
+
+**So ads roughly pay for a LIGHT free user and cannot pay for a HEAVY one** — and in
+tier-1 geos a light-to-moderate free user is ad-profitable outright. That is a better
+answer than "a tenth" and it has a design consequence worth keeping:
+
+> ⚠️ **The 3/day cap is what makes ads viable at all.** Ad revenue per user is flat —
+> it scales with screens viewed, not with AI spend — while AI cost scales with the cap.
+> Raising the free AI cap breaks the ad economics silently, because the revenue side
+> does not move. If the free cap is ever raised, re-do this table first.
+
+Ads remain a **top-up next to Pro, not a replacement for it** — but the reason is no
+longer that they earn a tenth. It is that they are flat per user while a subscription
+is not, so they can fund a free tier and cannot fund growth.
+
+## Two scenarios at 1,000 MAU — the comparison that keeps being asked for
+
+Assumes 80% free / 20% trial-or-pro, 2% paid conversion, Apple's 15% Small Business
+rate, and the in-feed impression estimate above. ⚠️ **Every figure is estimated.**
+
+**Scenario A — ads only, no purchase flow (where we are today if nothing changes):**
+
+| | India-weighted | Tier-1-weighted |
+|---|---|---|
+| Ad revenue, 800 free users | $17–44/mo | $110–230/mo |
+| AI cost of those users (moderate) | ~$96/mo | ~$96/mo |
+| **Net** | **−$52 to −$79** | **+$14 to +$134** |
+
+Free users who hit the 50-save wall have nowhere to go, so the ceiling on this scenario
+is "ads subsidise a free product", never "the product earns".
+
+**Scenario B — Pro only, no ads (what the code is built for today):**
+
+| | India (₹99 → ~$0.96 net) | US ($7 → $5.95 net) |
+|---|---|---|
+| 20 subscribers | $19/mo | $119/mo |
+| AI cost of 20 pro users (moderate, 20/day cap) | ~$5/mo | ~$5/mo |
+| AI cost of the 800 free users | ~$96/mo | ~$96/mo |
+| **Net** | **−$82** | **+$18** |
+
+⚠️ **Read the two tables together, because that is the finding:** at this scale and at
+INR pricing, *neither one alone is profitable* — and they are worth roughly the same
+amount. **A + B together** is ~$36–63/mo India and ~$230–350/mo tier-1 against the same
+~$101 of tokens, which is the first combination that clears its own cost in INR.
+
+The decision is therefore not "ads or subscription". It is "both, in the order the
+platforms allow" — and the platforms allow the subscription first.
+
+## The objection that is not about money
+
+**Pinterest's feed is discovery; ours is the user's own saved things.** A Promoted Pin
+is more of what you came for. A promoted tile in Findable sits between two reels *you*
+chose to keep — closer to an ad in a photo album than an ad in a feed. That is a
+product risk no eCPM table answers, and it is the reason to test tolerance before
+buying an SDK.
+
+## The buildable half, available now and free
+
+Build the **slot**, not the network: one tile in the masonry, clearly labelled, that
+renders **our own Pro upsell**. `app/index.tsx` already distributes tiles
+shortest-column-first, so injection is a few lines, and it is **JS — it ships OTA**.
+
+It answers the only two questions that decide the whole thing:
+1. Do people tolerate a non-organic tile in their own library, or does it read as a
+   breach? (Measurable: do free users stop opening the Library?)
+2. Does an in-grid promo convert better than the existing 90%/95% quota nags?
+
+If tolerance is bad, that is learned for the price of an OTA instead of an SDK, a
+privacy rewrite, a CMP and a build. If it is good, the slot is already there the day
+AdMob becomes possible — which is after launch, not before.
+
+## Trigger conditions — unchanged, plus one
+
+The three above still hold (live in store, ≥2,000 MAU or ~10,000 impressions/month,
+geo data in hand). Add: **the house-ad slot has run and tolerance looked acceptable.**
+Fitting an ad network into a slot nobody minds is a different project from discovering
+mid-integration that the slot itself was the problem.

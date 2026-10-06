@@ -48,49 +48,46 @@ because a pause is reversible. A deletion would not have been.
 
 ---
 
-## ▶ OTA CHANNEL — LIVE AGAIN, and these are the runtimes to match
+## ▶ OTA CHANNEL — FROZEN AGAIN until 1.0.13 / build 14 are installed
 
-Build 1.0.12 / Android build 12 shipped from `aa80f05` on 2026-09-24 and the freeze is
-over. The `preview` channel now serves:
+Builds fired 2026-10-06 from `a0ee617` (the iOS share-outcome subscriber). **Both
+runtimes moved**, so an update published from `develop` now reaches NOTHING on the
+builds people are carrying, and a mismatched update does not warn.
 
-| Platform | Runtime version | Build |
-|---|---|---|
-| iOS | `6deee3ef90d4fae6547ba9cb0985985127e0bc82` | 1.0.12 (TestFlight) |
-| Android | `19e8d21e48a0129d4a7e8ca8f6f82de42d277bcd` | build 12 **and 13** (APK) |
+| Platform | New runtime | Build | Previous |
+|---|---|---|---|
+| iOS | `01741a6e204911edf5c38d7ef1753efb045f49bd` | 1.0.13 (uploaded to ASC) | `6deee3ef…` (1.0.12) |
+| Android | `7bc363b681d7cc292750e39c0c36b635f2d00a88` | build 14 (versionCode 14) | `19e8d21e…` (12 and 13) |
 
-⚠️ **Build 13 shares build 12's runtime.** `autoIncrement` bumps `versionCode`, and
-`versionCode` is NOT in the fingerprint (`appVersionSource: remote`, so it is not even in
-app.json) — measured 2026-09-25. One update therefore serves both builds, which is the
-only reason the channel survived that build.
+⚠️ **The Android runtime moved because of an iOS-only file.** `withInvisibleShareIOS.js`
+is a config plugin, and config-plugin files are hashed for every platform — predicted by
+`fingerprint:compare` on 2026-09-25 (`7bc363b6…`) and confirmed as the value EAS computed
+for this build. See mobile/AGENTS.md.
 
-Before every `eas update`, confirm the local project still computes those two:
+Before every `eas update`, confirm the local project still computes the installed
+build's runtime:
 
 ```bash
 cd mobile && npx eas-cli@latest fingerprint:compare --build-id <build id>
 ```
 
-⚠️ **Use `fingerprint:compare`, not `fingerprint:generate`.** `compare` prints the
-build's fingerprint and the local one side by side and names the differing source when
-they disagree; `generate` gives a number with nothing to check it against. Local
-`generate` measured THREE values for one commit on 2026-09-24 (`b8879267…`,
-`f046ecc5…`, `c5badda2…`) because this machine has `core.autocrlf=true`, so a file a
-tool wrote with LF hashes differently from the same file after a checkout. Both
-platforms were re-verified as matching on 2026-09-25.
+⚠️ **Use `fingerprint:compare`, not `fingerprint:generate`.** `compare` prints both
+values and names the differing source; `generate` gives a number with nothing to check it
+against, and on this machine (`core.autocrlf=true`) it returned three different values for
+one commit on 2026-09-24.
 
-⚠️ **Builds and updates should be run from the SAME machine**, for the same reason: a
-build run in a Linux cloud session and an update published from this Windows checkout
-can disagree about identical source.
+⚠️ **Builds and updates should be run from the SAME machine** — a build from a Linux
+cloud session and an update from this Windows checkout can disagree about identical
+source.
 
-⚠️ **THE FINGERPRINT DOES NOT SEE `mobile/plugins/android/ShareSave.kt`** — measured
-2026-09-25: editing that file left the Android runtime on `19e8d21e…`. That is the
-documented trap running backwards. The known one is "the fingerprint moved, so the
-update reaches nothing"; this one is **"the fingerprint did not move, so the update
-applies happily on top of a stale native share service."** A Kotlin fix therefore looks
-shipped, publishes without complaint, and changes nothing on the device until the next
-APK. Kotlin and Swift changes need a BUILD, always, and the fingerprint will not remind
-you.
+⚠️ **THE FINGERPRINT DOES NOT SEE `mobile/plugins/android/ShareSave.kt`** (measured
+2026-09-25: editing it left the Android runtime unchanged). That is the trap running
+backwards — the update applies happily on top of a stale native share service. A matching
+fingerprint proves an update will REACH a build and nothing about whether the native half
+of the change is in it.
 
----
+Delete this section's "FROZEN" framing once both builds are installed, and put the two
+runtimes above in the table.
 
 ## ▶ 1.0.12 FIELD TEST — two bugs, and only one of them can be fixed over the air
 
@@ -337,6 +334,37 @@ Owner testing 1.0.12 on 2026-09-25.
   ⚠️ If it is ever re-enabled, `auto_summary` and `can_ask` must stay on the
   same tier boundary — Ask reads `summary`, so a tier that can open Ask but
   only indexes its saves would answer from an empty library.
+- [ ] **Ads — NON-TRACKING, Pinterest-style, free tier only** (owner direction,
+  2026-10-06). Full analysis and the decision record in
+  [`docs/ADS_RESEARCH.md`](docs/ADS_RESEARCH.md) → "Addendum 2026-10-06". The short
+  version:
+  - ⚠️ **Cannot be connected before launch, and that has nothing to do with tracking.**
+    AdMob will not serve an app that is not publicly downloadable in a store; the
+    sequence `publish → verify → app-ads.txt → 2–3 day review → serving` cannot start
+    pre-launch.
+  - ⚠️ **Non-tracking is not the cheap version.** It removes the iOS ATT prompt and makes
+    App Store "Data Used to Track You" a No. It does NOT remove the `AD_ID` manifest
+    merge, the Play data-safety disclosure, the EEA/UK **certified CMP**, or the privacy-
+    policy processor row — and non-personalized inventory clears 30–50% below
+    personalized, so it moves the revenue DOWN.
+  - **It earns about as much as Pro does, from the people Pro never reaches.** In-feed
+    is high-volume where rewarded was high-value, so it clears the $100 payout threshold
+    far sooner. At 1,000 MAU, India-weighted: **ads ~$17–44/mo vs Pro at 2% ~$19/mo** —
+    same order of magnitude, completely different population (the ~98% who never
+    subscribe), and they stack. ⚠️ **Neither alone is profitable in INR at that scale;
+    together they are.** Full arithmetic and both scenarios in `docs/ADS_RESEARCH.md`.
+    ⚠️ An earlier version of this item said ads cover "a tenth" of the free tier's AI
+    cost — that compared against the CEILING (every free user maxing 3/day every day),
+    which no cohort does. Corrected 2026-10-06.
+  - ⚠️ **The 3/day free AI cap is what makes ads viable.** Ad revenue per user is FLAT —
+    it scales with screens viewed, not with AI spend — while AI cost scales with the cap.
+    Raising the free cap breaks the ad economics silently, because the revenue side does
+    not move. Re-do the table in `docs/ADS_RESEARCH.md` before ever raising it.
+  - **The buildable half, now, free, and OTA:** ship the SLOT with our own Pro upsell in
+    it. `app/index.tsx` distributes tiles shortest-column-first, so injection is small.
+    It measures the two things that decide everything — whether a non-organic tile in
+    someone's OWN library reads as a breach, and whether an in-grid promo converts better
+    than the existing 90%/95% quota nags. 👤 Owner decision pending on building it.
 - [ ] **Regional (PPP) pricing** — three storefront buckets, not 175 hand-tuned prices.
 - [~] **Tiers — mechanics built, billing pending.** Server-side entitlements
   (`app/entitlements.py`) work; the purchase flow does not exist.
