@@ -74,3 +74,4 @@ jobs:
           node --experimental-strip-types --no-warnings services/saveQuota.test.ts
           node --experimental-strip-types --no-warnings services/shareNotice.test.ts
           node --experimental-strip-types --no-warnings services/todoDates.test.ts
+          node --experimental-strip-types --no-warnings services/promoSlot.test.ts
