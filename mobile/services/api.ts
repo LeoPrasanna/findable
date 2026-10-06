@@ -43,6 +43,18 @@ export function thumbCandidates(url?: string | null): string[] {
 
 export interface Reel {
   id: string;
+  /**
+   * This save sits outside the newest `save_limit`, because the library is over its
+   * tier's cap. Read-only: still listed, still deletable, not openable.
+   *
+   * ⚠️ A RENDERING HINT, NOT THE RULE. The server refuses a locked read with a 403
+   * regardless of what this says — see backend/app/library_lock.py. Treating it as
+   * the enforcement is how a client-side "lock" becomes a suggestion.
+   *
+   * ⚠️ NOTHING IS EVER DELETED. Owner decision 2026-10-06, choosing lock over
+   * deleting the excess at the end of a trial. Copy must never imply otherwise.
+   */
+  locked?: boolean;
   url: string;
   platform: string;
   title: string | null;

@@ -295,7 +295,38 @@ Owner testing 1.0.12 on 2026-09-25.
     now says so once per session and in the library band: *"70 saves — 20 past the
     free limit of 50."* The cliff was never the bug; being told about it only
     afterwards was.
-- [ ] 🔴 👤 **DECIDE: does the trial-end cliff DELETE saves, or just pause new ones?**
+- [x] **The cliff LOCKS, it does not delete** (owner chose option 2, 2026-10-06).
+  `backend/app/library_lock.py`: the newest `save_limit` saves stay open, everything
+  older is read-only — still listed, still visible, still deletable — until the user
+  deletes newer saves or upgrades. **Nothing is ever deleted.** Every lock is
+  reversible by an action the user can take, and raising the cap unlocks the same rows
+  with no migration and no restore.
+  - ⚠️ **DELETE IS THE ONE OPERATION ALLOWED ON A LOCKED SAVE, and it has to be.**
+    Deleting is how someone gets back under the cap; refusing it would make the lock a
+    trap whose only exit is a purchase. `_get_owned_reel_or_404` refuses locked saves
+    **by default** and `delete_reel` opts out explicitly — that direction is the
+    load-bearing part, because an endpoint added later gets the safe behaviour without
+    anyone remembering to ask for it. `test_DELETE_STILL_WORKS_on_a_locked_save`.
+  - ⚠️ **Ask cannot answer out of locked saves.** Otherwise the lock hands back its
+    own withheld content as prose, and charges an AI action to do it. Excluded in the
+    QUERY, not filtered after.
+  - ⚠️ **Locked saves still count toward the cap.** Locking does not free space, so
+    the locked ones are the obvious things to delete. A lock that silently created
+    room would be a second, invisible cap that the save gate disagreed with.
+  - ⚠️ **The flag on a reel is a RENDERING HINT, not the enforcement.** The server
+    403s a locked read regardless; a client that ignored `locked` must still be
+    refused. `TestEnforcement` asserts that directly.
+  - Ties at the boundary stay OPEN (strictly-older comparison), so a double-save in
+    the same second can leave a library one or two over its cap. That is the direction
+    an error has to go.
+  - The tile keeps its picture under a scrim and a LOCKED badge rather than going
+    blank — the point of locking instead of deleting is that the save is still there,
+    and a blanked tile looks exactly like the deletion we chose not to do. Tapping it
+    explains itself and offers the free exit first; a tile that silently ignores a tap
+    is indistinguishable from a broken one.
+  - 13 tests in `backend/tests/test_library_lock.py`; **369 backend tests pass.**
+- [x] 👤 **DECIDED: the trial-end cliff locks rather than deletes** (owner,
+  2026-10-06). Kept for the record because the rejected option was irreversible:
   The owner drafted warning copy promising *"once the trial overs you will lose older
   saves, only latest saves will be there"* (2026-10-06). **That behaviour does not
   exist and was deliberately not built** — it is irreversible destruction of content a
@@ -310,10 +341,12 @@ Owner testing 1.0.12 on 2026-09-25.
     loss-aversion pressure without destroying anything, and it is what Dropbox and
     Evernote do. Costs real work: the list query, the detail screen, and Ask all need
     to know what is locked.
-  3. **Delete the excess.** Strongest pressure, and the only one that cannot be
-    undone. ⚠️ It destroys user content for non-payment, it will produce one-star
-    reviews from people who did not read a notification, and it needs a genuine
-    grace period plus an export before it could be defensible at all.
+  3. **Delete the excess.** NOT CHOSEN. Strongest pressure, and the only one that
+    cannot be undone. ⚠️ It destroys user content for non-payment, it will produce
+    one-star reviews from people who did not read a notification, and it would need a
+    genuine grace period plus an export before it could be defensible at all. The
+    owner's drafted warning copy described this behaviour; it was never built, and the
+    shipped copy says "nothing has been deleted", which is true.
 - [x] **The trial→free cliff said the wrong thing, and it said it at the till**
   (owner spotted it, 2026-10-06: *"if he/she save more than 50 and after end of trial
   period, then logic fails right?"*). **The gate itself was always right** — the cap

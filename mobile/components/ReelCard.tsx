@@ -180,6 +180,31 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
     if (candidates.length === 0) tryRepair();
   }, [reel.id]);
 
+  /**
+   * Tapping a locked tile explains itself rather than doing nothing.
+   *
+   * ⚠️ A DEAD TILE IS A BUG REPORT. The alternative was disabling the press, and a
+   * tile that simply ignores a tap is indistinguishable from a broken one — which is
+   * how a deliberate limit becomes "the app does not open my saves any more".
+   *
+   * ⚠️ IT OFFERS BOTH EXITS, and the free one first. Delete is how someone gets back
+   * under the cap without paying, and a limit whose only remedy costs money reads as a
+   * hostage note. Long-press still deletes from here, so the free exit is one gesture
+   * away from the sentence describing it.
+   */
+  const explainLock = () => {
+    const title = 'This save is locked';
+    const body =
+      "Your library is over your plan's limit, so the oldest saves are read-only. "
+      + 'Nothing has been deleted — long-press a tile to remove saves you are done '
+      + 'with, and the older ones unlock. Pro keeps a much larger library open.';
+    if (Platform.OS === 'web') window.alert(`${title}\n\n${body}`);
+    else Alert.alert(title, body, [
+      { text: 'Not now', style: 'cancel' },
+      { text: 'See Pro', onPress: () => router.push('/pro') },
+    ]);
+  };
+
   return (
     <Animated.View style={[styles.frame, { opacity, aspectRatio: aspect }]}>
       {/* Long-press deletes. The visible × is gone — the reference grid has no
@@ -188,7 +213,7 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
           still lives on the detail screen, with a confirm. */}
       <Pressable
         style={styles.tap}
-        onPress={() => router.push(`/reel/${reel.id}`)}
+        onPress={reel.locked ? explainLock : () => router.push(`/reel/${reel.id}`)}
         onLongPress={handleDelete}
       >
         {thumb ? (
@@ -257,6 +282,24 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
           </Text>
         </View>
       </Pressable>
+
+      {/* ⚠️ A SCRIM, NOT A HIDDEN TILE. The picture stays visible on purpose: the
+          point of locking rather than deleting is that the save is still THERE, and
+          blanking it would look exactly like the deletion we chose not to do. The
+          scrim plus the badge says "yours, not open" — pointerEvents none so the tap
+          still reaches the explanation above. */}
+      {reel.locked ? (
+        <View style={styles.lockScrim} pointerEvents="none">
+          <View style={styles.lockBadge}>
+            {/* ⚠️ onImage, NOT colors.textPrimary. This sits on a 55% black scrim in
+                BOTH schemes, and textPrimary inverts with the theme — in light mode
+                it would be near-black ink on near-black backing. The onImage tokens
+                exist for exactly this surface. */}
+            <Icon name="lock-closed" size={11} color={onImage.primary} />
+            <Text style={styles.lockText}>LOCKED</Text>
+          </View>
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -280,6 +323,27 @@ const styles = themed(() => StyleSheet.create({
   // The tile IS the image — no padding, no surface behind it, no inset around
   // the photo. That is the load-bearing part of the Pinterest read: the rounded
   // rectangle IS the picture. Wrap it in a padded card and it becomes a sticker.
+  /* ⚠️ ABSOLUTE FILL, OUTSIDE THE PRESSABLE. It cannot live inside the tap target
+     or it would swallow the press that explains it, and it cannot dim the frame via
+     `opacity` on the parent because that animates on mount (see `opacity` above) and
+     the two would fight. */
+  lockScrim: {
+    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  lockBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: spacing.sm, paddingVertical: 5,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1, borderColor: onImage.muted,
+  },
+  lockText: {
+    color: onImage.primary, fontSize: 9, fontWeight: '800',
+    letterSpacing: tracking.label,
+  },
+
   frame: {
     /**
      * ⚠️ WIDTH, NOT `flex: 1` — AND THIS IS THE FIX FOR THE MANGLED LIBRARY

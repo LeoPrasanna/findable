@@ -16,6 +16,7 @@ from app.routes.models.reel import (
 )
 from app.services import extractor, transcriber, summarizer
 from app.ratelimit import rate_limit
+from app import library_lock
 from app.quota import charge_ai_action
 from app.entitlements import entitlements_for
 from app.auth import get_current_user, AuthUser
@@ -102,9 +103,18 @@ PENDING_RECOVERY_LIMIT = 25
 router = APIRouter(prefix="/api/reels", tags=["reels"])
 
 
-def _get_owned_reel_or_404(reel_id: str, user: AuthUser, db: Session) -> ReelDB:
+def _get_owned_reel_or_404(reel_id: str, user: AuthUser, db: Session,
+                           *, allow_locked: bool = False) -> ReelDB:
     """Fetch a reel the caller owns, else 404. A 404 (not 403) on someone else's
-    reel avoids leaking that the id exists."""
+    reel avoids leaking that the id exists.
+
+    ⚠️ LOCKED IS REFUSED BY DEFAULT, and the default is the load-bearing part. Nine
+    endpoints route through here; an endpoint added later gets the safe behaviour
+    without anyone remembering to ask for it, and only the callers that have a reason
+    opt out. `allow_locked=True` means "this is something the user may still do to a
+    read-only save" — today that is DELETE, which has to work or the lock becomes a
+    trap: deleting is how someone gets back under the cap.
+    """
     reel = (
         db.query(ReelDB)
         .filter(ReelDB.id == reel_id, ReelDB.user_id == user.id)
@@ -112,6 +122,18 @@ def _get_owned_reel_or_404(reel_id: str, user: AuthUser, db: Session) -> ReelDB:
     )
     if not reel:
         raise HTTPException(status_code=404, detail="Reel not found")
+    if not allow_locked and library_lock.is_locked(reel, library_lock.cutoff_for(user, db)):
+        ent = entitlements_for(user, db)
+        raise HTTPException(
+            status_code=403,
+            # Says what happened, why, and BOTH ways out. A lock with one way out
+            # that costs money reads as a hostage note.
+            detail=(
+                f"This save is locked. Your library holds more than the {ent.save_limit} "
+                f"your plan keeps open, so the oldest are read-only — nothing has been "
+                f"deleted. Delete some newer saves to unlock it, or go Pro."
+            ),
+        )
     return reel
 
 
@@ -507,7 +529,12 @@ def list_reels(
         total = query.count()
         page = query.order_by(ReelDB.created_at.desc()).offset(offset).limit(limit).all()
 
-    return ReelListResponse(total=total, items=[_to_response(r) for r in page])
+    # One cutoff for the whole page — a per-row lookup would be a query per tile.
+    cutoff = library_lock.cutoff_for(user, db)
+    return ReelListResponse(
+        total=total,
+        items=[_to_response(r, library_lock.is_locked(r, cutoff)) for r in page],
+    )
 
 
 # ⚠️ `GET /search` lived here until 2026-08-10, backed by services/search.py
@@ -842,7 +869,11 @@ def refresh_thumbnail(reel_id: str, user: AuthUser = Depends(get_current_user),
 
 @router.delete("/{reel_id}")
 def delete_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    reel = _get_owned_reel_or_404(reel_id, user, db)
+    reel = _get_owned_reel_or_404(
+        # ⚠️ THE ONE CALLER THAT ALLOWS A LOCKED SAVE, and it has to. Deleting is how
+        # a user gets back under the cap and unlocks the rest; refusing it would make
+        # the lock a trap with no exit but a purchase.
+        reel_id, user, db, allow_locked=True)
     # Children are removed explicitly — SQLite only honors ON DELETE CASCADE with
     # PRAGMA foreign_keys on, and rows saved before that fix may be orphaned.
     db.query(TaskDB).filter(TaskDB.reel_id == reel.id).delete(synchronize_session=False)
@@ -1019,8 +1050,9 @@ def _store_extraction(db: Session, url: str, info: dict) -> None:
         logger.warning(f"[CACHE] write failed for {url}: {e}")
 
 
-def _to_response(reel: ReelDB) -> ReelResponse:
+def _to_response(reel: ReelDB, locked: bool = False) -> ReelResponse:
     return ReelResponse(
+        locked=locked,
         id=reel.id,
         url=reel.url,
         platform=reel.platform,

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.database import get_db, ReelDB
+from app import library_lock
 from app.routes.models.reel import ReelResponse
 from app.services import librarian
 from app.routes.reels import _to_response
@@ -60,12 +61,16 @@ def ask(body: AskRequest, user: AuthUser = Depends(get_current_user), db: Sessio
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
     charge_ai_action(db, user, action="ask", label=q)
 
-    reels = (
-        db.query(ReelDB)
-        .filter(ReelDB.user_id == user.id)
-        .order_by(ReelDB.created_at.desc())
-        .all()
-    )
+    # ⚠️ LOCKED SAVES ARE NOT PART OF THE CORPUS. A library over its cap keeps its
+    # oldest saves read-only (app/library_lock.py); answering out of them would hand
+    # back, in prose, exactly the content the lock is withholding — and it would do it
+    # while charging an AI action. Excluded in the QUERY rather than filtered after,
+    # so the row never reaches the payload.
+    cutoff = library_lock.cutoff_for(user, db)
+    corpus = db.query(ReelDB).filter(ReelDB.user_id == user.id)
+    if cutoff is not None:
+        corpus = corpus.filter(ReelDB.created_at >= cutoff)
+    reels = corpus.order_by(ReelDB.created_at.desc()).all()
     payload = [
         {"id": r.id, "title": r.title, "summary": r.summary or [], "tags": r.tags or [], "notes": r.notes}
         for r in reels
@@ -97,12 +102,16 @@ def ask_stream(body: AskRequest, user: AuthUser = Depends(get_current_user), db:
     # halfway through a half-written answer.
     charge_ai_action(db, user, action="ask", label=q)
 
-    reels = (
-        db.query(ReelDB)
-        .filter(ReelDB.user_id == user.id)
-        .order_by(ReelDB.created_at.desc())
-        .all()
-    )
+    # ⚠️ LOCKED SAVES ARE NOT PART OF THE CORPUS. A library over its cap keeps its
+    # oldest saves read-only (app/library_lock.py); answering out of them would hand
+    # back, in prose, exactly the content the lock is withholding — and it would do it
+    # while charging an AI action. Excluded in the QUERY rather than filtered after,
+    # so the row never reaches the payload.
+    cutoff = library_lock.cutoff_for(user, db)
+    corpus = db.query(ReelDB).filter(ReelDB.user_id == user.id)
+    if cutoff is not None:
+        corpus = corpus.filter(ReelDB.created_at >= cutoff)
+    reels = corpus.order_by(ReelDB.created_at.desc()).all()
     payload = [
         {"id": r.id, "title": r.title, "summary": r.summary or [], "tags": r.tags or [], "notes": r.notes}
         for r in reels
