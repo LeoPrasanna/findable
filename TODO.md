@@ -282,6 +282,38 @@ Owner testing 1.0.12 on 2026-09-25.
   when it became 50/500. Keep them that way.
   The upsell is **tier-aware** in both places (server 403 and client alert):
   free is offered Pro, trial and pro are not, because they already hold 500.
+- [x] **The trial cap is 100, not 500** (owner, 2026-10-06) — `TRIAL_SAVE_LIMIT`,
+  env-overridable, in `render.yaml` for both services. ⚠️ **This REVERSES part of the
+  2026-09-11 decision** that the trial should carry the paid cap. That argument was "a
+  trial that caps at the free number teaches the wrong thing about the product", and
+  it was right about AI limits and wrong about storage: 500-on-trial against
+  50-on-free let someone build a library the free tier could not hold, so the most
+  engaged trial users — the cohort most likely to convert — landed hardest the day it
+  ended. The trial still keeps the PAID AI limit, because that is what paying feels
+  like. 2x leaves a cliff a person can climb down; 10x did not.
+  - **Warned at the free limit, not at the trial limit.** Crossing 50 during a trial
+    now says so once per session and in the library band: *"70 saves — 20 past the
+    free limit of 50."* The cliff was never the bug; being told about it only
+    afterwards was.
+- [ ] 🔴 👤 **DECIDE: does the trial-end cliff DELETE saves, or just pause new ones?**
+  The owner drafted warning copy promising *"once the trial overs you will lose older
+  saves, only latest saves will be there"* (2026-10-06). **That behaviour does not
+  exist and was deliberately not built** — it is irreversible destruction of content a
+  user chose to keep, and the shipped warning says the opposite ("Nothing is deleted
+  when your trial ends"), which is what the code actually does. A test asserts the
+  copy cannot drift into threatening deletion. Three options, and this needs an
+  explicit owner answer because two of them are one-way doors:
+  1. **Keep today's behaviour** — nothing is deleted, new saves pause until they are
+    back under the cap or go Pro. Free, shipped, honest. ⭐ Recommended.
+  2. **Lock, do not delete** — saves past the cap stay in the library but greyed and
+    unopenable, restored instantly by Pro or by deleting newer ones. Keeps the
+    loss-aversion pressure without destroying anything, and it is what Dropbox and
+    Evernote do. Costs real work: the list query, the detail screen, and Ask all need
+    to know what is locked.
+  3. **Delete the excess.** Strongest pressure, and the only one that cannot be
+    undone. ⚠️ It destroys user content for non-payment, it will produce one-star
+    reviews from people who did not read a notification, and it needs a genuine
+    grace period plus an export before it could be defensible at all.
 - [x] **The trial→free cliff said the wrong thing, and it said it at the till**
   (owner spotted it, 2026-10-06: *"if he/she save more than 50 and after end of trial
   period, then logic fails right?"*). **The gate itself was always right** — the cap
@@ -732,6 +764,32 @@ if dropped, delete `docs/DESIGN_PROPOSAL.md` too.
 - **Capsule tab bar + centre FAB restyle.** Closed 2026-08-10. The instruction assumed an
   `app/(tabs)/` directory that has never existed; Home and Library **share the route `/`**
   and are told apart by a session flag, which expo-router's `Tabs` cannot express.
+- **One account per phone / device-locked trials.** Asked 2026-10-06 ("same mobile with
+  multiple gmail or apple ids can have multiple accounts, can't we restrict them to one
+  phone to one account?"). **No — the mechanism is against App Store rules and does not
+  work anyway.**
+  - ⚠️ **Apple forbids the technique.** Guideline 5.1.1(iv): an app may not use
+    device fingerprinting to identify a device or user. There is no durable device id
+    to use legitimately — `identifierForVendor` resets once all of a vendor's apps are
+    uninstalled, and the IDFA needs ATT consent and can be reset or zeroed at will.
+  - **Android is no better**: `ANDROID_ID` is per signing-key AND per device AND per
+    user profile, and a factory reset changes it. Play policy also limits tying
+    persistent identifiers to personal data.
+  - **It punishes the honest.** Shared family phones, a partner signing in, a work and
+    a personal account, a second-hand handset — all broken, to inconvenience an
+    attacker who only needs a second phone or an emulator.
+  - **The loss is already bounded, which is the real answer.** A farmed trial is worth
+    at most `TRIAL_DAYS × AI_DAILY_LIMIT × ~$0.004` ≈ **$0.40**, and
+    `normalize_email()` already defeats the cheap version of the attack: it strips
+    `+tags` for every provider and dots in Gmail local parts, and `TrialGrantDB`
+    survives account deletion, so a genuinely fresh trial costs a genuinely fresh
+    phone-verified Google account.
+  - **And the store will enforce it for free when billing lands.** Apple's
+    introductory-offer eligibility is per Apple ID and Family Sharing group, Google
+    Play's equivalent is per Google account — both enforced at the store, neither
+    bypassable by making Gmail accounts. If trial abuse ever shows up in the data, the
+    fix is to move the trial onto a store intro offer, not to fingerprint phones.
+
 - **DDoS self-testing and a formal pentest.** ToS violation and revenue-stage respectively.
 
 ### Closed during the 2026-09-07 condense

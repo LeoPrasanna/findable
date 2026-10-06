@@ -186,6 +186,9 @@ export interface Usage {
    *  2026-09-11 and was a wrong promise shown to every trial user until 2026-10-06.
    *  Both numbers are env-overridable, so the client cannot safely guess either. */
   after_trial?: { save_limit: number; ai_limit: number };
+  /** What Pro holds. ⚠️ SERVER-SENT so the upsell copy cannot promise a number the
+   *  server does not grant — promoSlot.ts used to hardcode 500. */
+  pro?: { save_limit: number; ai_limit: number };
   categories?: number; // distinct categories across the whole library
   platforms?: number;  // distinct platforms across the whole library
   used: number;        // AI actions spent today

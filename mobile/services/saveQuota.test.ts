@@ -74,4 +74,44 @@ assert.match(saveQuota(50, 50).message, /50\/50/);
 // The no-upsell rule still holds in the new branch.
 assert.doesNotMatch(saveQuota(200, 50).message, /pro|upgrade|subscri/i, 'upsell leaked when over');
 
+/**
+ * The trial overflow warning. The cap a trial user is measured against today is not
+ * the one they will be measured against next week, and nothing used to say so.
+ */
+import { trialOverflow } from './saveQuota.ts';
+
+const T = { tier: 'trial', freeLimit: 50, proLimit: 500 };
+assert.equal(trialOverflow({ ...T, used: 70 })!.over, 20, 'counts how far past free');
+assert.match(trialOverflow({ ...T, used: 70 })!.message, /70 saves/);
+assert.match(trialOverflow({ ...T, used: 70 })!.message, /20 past/);
+assert.match(trialOverflow({ ...T, used: 70 })!.body, /Pro holds 500/);
+
+// Only during the trial, and only once actually past the free limit.
+assert.equal(trialOverflow({ ...T, used: 50 }), null, 'at the free limit is not past it');
+assert.equal(trialOverflow({ ...T, used: 10 }), null, 'well under');
+assert.equal(trialOverflow({ ...T, tier: 'free', used: 70 }), null, 'free already lives it');
+assert.equal(trialOverflow({ ...T, tier: 'pro', used: 70 }), null, 'pro is not warned');
+// The usage cache starts null; an unknown tier must not warn.
+assert.equal(trialOverflow({ ...T, tier: null, used: 70 }), null, 'unknown tier');
+assert.equal(trialOverflow({ ...T, used: null }), null, 'unknown count');
+assert.equal(trialOverflow({ tier: 'trial', used: 70, freeLimit: null }), null, 'unknown free cap');
+assert.equal(trialOverflow({ tier: 'trial', used: 70, freeLimit: 0 }), null, 'nonsense free cap');
+
+// Pro's number is the server's or it goes unsaid — never guessed.
+assert.doesNotMatch(trialOverflow({ tier: 'trial', used: 70, freeLimit: 50 })!.body, /Pro holds/);
+
+/**
+ * ⚠️ IT MUST NOT THREATEN DELETION. Saves are never deleted — the cap gates new
+ * saves only. The owner drafted copy saying older saves would be lost; that is not
+ * what the app does, and shipping it would be a lie that costs a one-star review the
+ * moment someone finds their reels still there.
+ */
+assert.doesNotMatch(
+  trialOverflow({ ...T, used: 70 })!.body,
+  /you will lose|you'll lose|older saves|be removed|will be deleted|are deleted/i,
+  'the warning must not promise a deletion the app does not do',
+);
+assert.match(trialOverflow({ ...T, used: 70 })!.body, /Nothing is deleted/,
+  'and it says so outright, because that is the question a warning like this raises');
+
 console.log('saveQuota: ok');

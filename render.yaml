@@ -61,8 +61,10 @@ services:
       # wall matters more than hiding it. Ship billing before real users arrive.
       - key: FREE_SAVE_LIMIT         # code default: 50
         value: "50"
-      - key: PRO_SAVE_LIMIT          # trial + pro
+      - key: PRO_SAVE_LIMIT          # pro only
         value: "500"
+      - key: TRIAL_SAVE_LIMIT        # code default: 100
+        value: "100"
       # ── Secrets — set in THIS service's dashboard (savehere-dev project) ──────
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -116,8 +118,10 @@ services:
   #     # exists only until billing ships. PROD SHOULD NOT CARRY IT — prod going
   #     # live implies a working purchase flow, which is exactly the condition
   #     # that makes the real 50 correct.
-  #     - key: PRO_SAVE_LIMIT          # trial + pro
+  #     - key: PRO_SAVE_LIMIT          # pro only
   #       value: "500"
+  #     - key: TRIAL_SAVE_LIMIT        # code default: 100
+  #       value: "100"
   #     - key: ANTHROPIC_API_KEY
   #       sync: false
   #     - key: DATABASE_URL          # SaveHere prod SESSION POOLER (:5432)

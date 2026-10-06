@@ -91,3 +91,54 @@ export function saveQuota(used: number | null | undefined, limit: number | null 
   }
   return { ...base, level: 'ok', message: '' };
 }
+
+/**
+ * A TRIAL library that has already outgrown the free tier.
+ *
+ * ⚠️ THIS IS THE WARNING THAT DID NOT EXIST, AND ITS ABSENCE WAS THE WHOLE PROBLEM.
+ * The trial cap and the free cap are different numbers, so a trial user can sail past
+ * the free limit without a word and meet it as a wall on the day the trial ends. The
+ * cliff was not the bug — being told about it only afterwards was.
+ *
+ * ⚠️ IT PROMISES NOTHING THE APP DOES NOT DO. Saves are NEVER deleted: the cap gates
+ * new saves only (`routes/reels.py`), the library stays fully viewable and searchable,
+ * and deleting back under the line re-opens saving. Copy that threatens deletion would
+ * be a lie today, and the kind of lie that costs a one-star review when someone
+ * discovers their reels are still there.
+ *
+ * Returns null unless the warning is both true and useful.
+ */
+export interface TrialOverflow {
+  /** How many saves are already past the free limit. */
+  over: number;
+  /** One line for the library band. */
+  message: string;
+  /** The once-per-session interruption. */
+  title: string;
+  body: string;
+}
+
+export function trialOverflow(opts: {
+  tier?: string | null;
+  used?: number | null;
+  freeLimit?: number | null;
+  proLimit?: number | null;
+}): TrialOverflow | null {
+  // Exactly 'trial'. A null tier (the usage cache starts null) must not warn.
+  if (opts.tier !== 'trial') return null;
+  if (typeof opts.used !== 'number' || typeof opts.freeLimit !== 'number') return null;
+  if (opts.freeLimit <= 0 || opts.used <= opts.freeLimit) return null;
+
+  const over = opts.used - opts.freeLimit;
+  // Pro's number comes from the server or is left unsaid — never guessed.
+  const pro = typeof opts.proLimit === 'number' ? ` Pro holds ${opts.proLimit}.` : '';
+  return {
+    over,
+    message: `${opts.used} saves — ${over} past the free limit of ${opts.freeLimit}.`,
+    title: 'Past the free limit',
+    body:
+      `You have ${opts.used} saves and the free tier holds ${opts.freeLimit}. `
+      + `Nothing is deleted when your trial ends — but new saves pause until you are back `
+      + `under ${opts.freeLimit}.${pro}`,
+  };
+}

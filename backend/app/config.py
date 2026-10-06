@@ -95,6 +95,15 @@ class Settings:
     # anyone grandfathered in.
     FREE_SAVE_LIMIT: int = int(os.getenv("FREE_SAVE_LIMIT", "50"))
     PRO_SAVE_LIMIT: int = int(os.getenv("PRO_SAVE_LIMIT", "500"))
+    # ⚠️ THE TRIAL NO LONGER GETS THE PRO CAP (owner, 2026-10-06), and this
+    # REVERSES the 2026-09-11 reasoning that it should. That argument was "a trial
+    # that caps at the free number teaches the wrong thing about the product", and
+    # it was right about the AI limits and wrong about storage: a 500-save trial
+    # against a 50-save free tier lets someone build a library the free tier cannot
+    # hold, so the most engaged trial users — the ones most likely to convert — land
+    # hardest the day it ends. 100 still demonstrates the product and leaves a cliff
+    # a person can actually climb down.
+    TRIAL_SAVE_LIMIT: int = int(os.getenv("TRIAL_SAVE_LIMIT", "100"))
 
     # Does the FREE tier get a full AI summary automatically on save?
     #

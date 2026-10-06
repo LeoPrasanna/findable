@@ -12,7 +12,7 @@ import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Landing } from '../components/Landing';
 import { Label, Body, Rule, GhostButton, Wordmark, EmptyState } from '../components/kit';
-import { hasEnteredLibrary, markEnteredLibrary, claimSaveCeilingWarning } from '../services/sessionFlags';
+import { hasEnteredLibrary, markEnteredLibrary, claimSaveCeilingWarning, claimTrialOverflowWarning } from '../services/sessionFlags';
 import { onUi, emitUi } from '../services/uiBus';
 import { applyEdits, markDeleted, unmarkDeleted } from '../services/libraryEdits';
 import { ASK_MIN_REELS } from '../constants/limits';
@@ -21,7 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { RollingTagline } from '../components/RollingTagline';
 import { useAuth } from '../contexts/AuthContext';
 import { getCachedUsage, onUsage } from '../services/usageCache';
-import { saveQuota } from '../services/saveQuota';
+import { saveQuota, trialOverflow } from '../services/saveQuota';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PromoTile } from '../components/PromoTile';
 import { promoSlots, promoCards, readDismissed, PROMO_ASPECT } from '../services/promoSlot';
@@ -64,6 +64,21 @@ export default function HomeScreen() {
   const [usage, setUsage] = useState(getCachedUsage);
   useEffect(() => onUsage(setUsage), []);
   const quota = saveQuota(usage?.saves?.used, usage?.saves?.limit);
+  /**
+   * A trial library that has already outgrown the free tier.
+   *
+   * ⚠️ THE CAP THEY ARE MEASURED AGAINST TODAY IS NOT THE ONE THEY WILL BE
+   * MEASURED AGAINST NEXT WEEK, and nothing used to say so. `quota` above compares
+   * against the TRIAL cap, so a trial user at 70 saves is comfortably 'ok' — and
+   * then meets a wall on the day the trial ends. The cliff was never the bug; being
+   * told about it only afterwards was.
+   */
+  const overflow = trialOverflow({
+    tier: usage?.tier,
+    used: usage?.saves?.used,
+    freeLimit: usage?.after_trial?.save_limit,
+    proLimit: usage?.pro?.save_limit,
+  });
 
   /**
    * The last 5% gets said out loud, once per session (owner: a popup at 950).
@@ -94,6 +109,24 @@ export default function HomeScreen() {
 ${body}`);
     else Alert.alert(title, body);
   }, [quota.level]);
+
+  /**
+   * Said once per session, the first time a trial library passes the free limit.
+   *
+   * ⚠️ IT PROMISES NOTHING THE APP DOES NOT DO. Saves are never deleted — the cap
+   * gates new saves only, the library stays fully viewable, and deleting back under
+   * the line re-opens saving. Copy threatening deletion would be a lie today, and the
+   * kind that costs a one-star review the moment someone finds their reels still
+   * there. See the note on trialOverflow in services/saveQuota.ts.
+   */
+  useEffect(() => {
+    if (!overflow) return;
+    if (!claimTrialOverflowWarning()) return;
+    if (Platform.OS === 'web') window.alert(`${overflow.title}
+
+${overflow.body}`);
+    else Alert.alert(overflow.title, overflow.body);
+  }, [!!overflow]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, displayName } = useAuth();
@@ -145,8 +178,12 @@ ${body}`);
       saveLimit: usage?.saves?.limit,
       aiPerDay: usage?.limit,
       canAsk: usage?.features?.ask,
+      // From the server, never hardcoded — see the note at the top of promoSlot.ts.
+      proSaveLimit: usage?.pro?.save_limit,
+      proAiLimit: usage?.pro?.ai_limit,
     }),
-    [usage?.saves?.limit, usage?.limit, usage?.features?.ask],
+    [usage?.saves?.limit, usage?.limit, usage?.features?.ask,
+     usage?.pro?.save_limit, usage?.pro?.ai_limit],
   );
 
   const dismissPromo = useCallback(() => {
@@ -490,15 +527,12 @@ ${body}`);
           900 saves, and a layout that shifts under you is a worse way to learn
           about a limit than the sentence itself. The roll is a nice-to-have;
           "you have room for 37 more" is not, so it wins the slot. */}
-      {quota.level === 'ok' ? (
-        <RollingTagline
-          compact
-          shuffle
-          lines={LIBRARY_CAPABILITIES}
-          style={styles.capabilityRoll}
-          numberOfLines={1}
-        />
-      ) : (
+      {/* ⚠️ THE TRIAL OVERFLOW LINE WINS THE SLOT OVER THE ROLL, for the same
+          reason the quota line does: "you will be over the free limit in six days"
+          is information you can act on, and the capability roll is a
+          nice-to-have. It loses to the quota line, which is more urgent still —
+          being refused today beats being refused next week. */}
+      {quota.level !== 'ok' ? (
         <View style={styles.capabilityRoll}>
           <Text
             style={[styles.quotaLine, quota.level !== 'warn' && styles.quotaLineHot]}
@@ -507,6 +541,18 @@ ${body}`);
             {quota.message}
           </Text>
         </View>
+      ) : overflow ? (
+        <View style={styles.capabilityRoll}>
+          <Text style={styles.quotaLine} numberOfLines={1}>{overflow.message}</Text>
+        </View>
+      ) : (
+        <RollingTagline
+          compact
+          shuffle
+          lines={LIBRARY_CAPABILITIES}
+          style={styles.capabilityRoll}
+          numberOfLines={1}
+        />
       )}
       {/* ⚠️ A full-bleed <Rule/> used to sit here, directly under the roll's own
           inset bottom hairline — two rules, 1px apart, at different widths.
