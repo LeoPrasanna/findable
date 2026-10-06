@@ -22,11 +22,24 @@ import { RollingTagline } from '../components/RollingTagline';
 import { useAuth } from '../contexts/AuthContext';
 import { getCachedUsage, onUsage } from '../services/usageCache';
 import { saveQuota } from '../services/saveQuota';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PromoTile } from '../components/PromoTile';
+import { promoAt, readDismissed, PROMO_ASPECT } from '../services/promoSlot';
 import { Avatar } from '../components/Avatar';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, columnsForWidth, themed, gradients, hazeLocations } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
+
+/** Per-device, so it survives a restart but never syncs — a dismissal is a UI
+ *  preference, not account state. */
+const PROMO_KEY = '@findable:promo:dismissedAt';
+
+/** What the masonry holds. A promoted tile occupies a slot in the flow exactly as a
+ *  reel does, which is the whole point of the format — see services/promoSlot.ts. */
+type Tile =
+  | { reel: Reel; aspect: number; idx: number }
+  | { promo: true; aspect: number };
 
 /** Category names are stored lowercase; sentence copy needs them capitalised.
  *  Single word by definition (see ALLOWED_CATEGORIES on the backend), so this
@@ -98,6 +111,29 @@ ${body}`);
   // landing, but a sign-out/sign-in resets it so new users start at Landing.
   const [entered, setEntered] = useState(hasEnteredLibrary());
   const [scrolled, setScrolled] = useState(false);
+  /**
+   * When the promoted tile was last dismissed on THIS device, or null.
+   *
+   * ⚠️ `undefined` MEANS "NOT READ YET" AND IS NOT THE SAME AS null. AsyncStorage is
+   * async, so a first paint that treated unknown as "never dismissed" would flash the
+   * promo at someone who has already said no — once per app open, which is how a
+   * dismissible tile becomes a nag. The slot renders nothing until the answer is in.
+   */
+  const [promoSnooze, setPromoSnooze] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    AsyncStorage.getItem(PROMO_KEY)
+      .then(raw => setPromoSnooze(readDismissed(raw, Date.now())))
+      .catch(() => setPromoSnooze(null));   // unreadable storage must not hide the slot forever
+  }, []);
+
+  const dismissPromo = useCallback(() => {
+    const at = Date.now();
+    setPromoSnooze(at);
+    // Optimistic: the tile is already gone, and a failed write only costs the
+    // dismissal on the next launch — never worth an error in front of someone who
+    // just told us to go away.
+    AsyncStorage.setItem(PROMO_KEY, String(at)).catch(() => {});
+  }, []);
 
   /**
    * ⚠️ A REFRESH MUST NOT SHRINK THE LIST — this used to throw you back to the
@@ -317,18 +353,38 @@ ${body}`);
    * the column assignment is height-driven.
    */
   const mosaic = useMemo(() => {
-    const cols: { reel: Reel; aspect: number; idx: number }[][] =
-      Array.from({ length: numColumns }, () => []);
+    const cols: Tile[][] = Array.from({ length: numColumns }, () => []);
     const heights = new Array(numColumns).fill(0);
-    reels.forEach((reel, idx) => {
-      const aspect = aspectFor(reel);
+    const shortestCol = () => {
       let shortest = 0;
       for (let i = 1; i < numColumns; i++) if (heights[i] < heights[shortest]) shortest = i;
-      cols[shortest].push({ reel, aspect, idx });
-      heights[shortest] += 1 / aspect;   // height in width-units
+      return shortest;
+    };
+    /**
+     * The promoted tile is placed BY THE SAME RULE as a real one — shortest column
+     * first, inline in the flow. That is what makes it Pinterest-shaped instead of a
+     * banner, and it is also why it cannot be pinned to a position on screen: the
+     * grid decides where it lands, exactly as it does for everything else.
+     *
+     * `undefined` snooze means storage has not answered yet — see promoSnooze.
+     */
+    const promo = promoSnooze === undefined
+      ? null
+      : promoAt(reels.length, usage?.tier, promoSnooze, Date.now());
+
+    reels.forEach((reel, idx) => {
+      if (idx === promo) {
+        const c = shortestCol();
+        cols[c].push({ promo: true, aspect: PROMO_ASPECT });
+        heights[c] += 1 / PROMO_ASPECT;
+      }
+      const aspect = aspectFor(reel);
+      const c = shortestCol();
+      cols[c].push({ reel, aspect, idx });
+      heights[c] += 1 / aspect;   // height in width-units
     });
     return cols;
-  }, [reels, numColumns]);
+  }, [reels, numColumns, usage?.tier, promoSnooze]);
 
   if (!entered) {
     // ⚠️ `emitUi('libraryState')` IS LOAD-BEARING, not a tidy-up. The tab bar
@@ -569,15 +625,21 @@ ${body}`);
           <View style={styles.masonry}>
             {mosaic.map((col, ci) => (
               <View key={ci} style={styles.column}>
-                {col.map(({ reel, aspect, idx }) => (
+                {col.map(tile => ('promo' in tile ? (
+                  <PromoTile
+                    key="promo"
+                    onPress={() => router.push('/pro')}
+                    onDismiss={dismissPromo}
+                  />
+                ) : (
                   <ReelCard
-                    key={reel.id}
-                    reel={reel}
-                    index={idx}
-                    aspect={aspect}
+                    key={tile.reel.id}
+                    reel={tile.reel}
+                    index={tile.idx}
+                    aspect={tile.aspect}
                     onDelete={removeReel}
                   />
-                ))}
+                )))}
               </View>
             ))}
           </View>

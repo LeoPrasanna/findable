@@ -607,6 +607,20 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
     `handleEventsForBackgroundURLSession` in the app delegate — worth doing only if the
     softer wording proves confusing in testing.
 
+- [x] **Promoted tile in the library grid — our own Pro upsell** (owner go-ahead,
+  2026-10-06). `components/PromoTile.tsx`, rules in `services/promoSlot.ts`, injected
+  into the mosaic in `app/index.tsx`. **JS only, so it ships OTA.** Free tier only,
+  after the 8th tile, never under 10 saves, labelled **PROMOTED**, dismissible for 7
+  days. The ad-network half is blocked on the app being live in a store — see
+  `docs/ADS_RESEARCH.md`.
+  - ⚠️ **THE DISMISS RATE IS THE MEASUREMENT, not a convenience.** A real AdMob unit is
+    not dismissible; shipping the first one undismissable would have guaranteed a false
+    positive about tolerance. The signal that would kill the whole idea is free users
+    opening the Library *less* — and that is the signal worth losing.
+  - ⚠️ **It will not appear on a trial or pro account.** `promoAt` requires the tier
+    string to be exactly `'free'`; an unknown tier (the usage cache starts null) shows
+    nothing, because advertising Pro to someone who bought it is a churn mechanic. Use
+    `scripts/dev_seed_tiers.py` to see it.
 - [ ] **Deep linking** — `savehere://reel/{id}` so a share-extension save opens the
   detail screen directly.
 - [ ] **Archive as a softer alternative to delete-on-completion.**
