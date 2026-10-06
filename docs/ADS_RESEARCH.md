@@ -131,3 +131,82 @@ revenue isn't small, it's functionally zero.
 The entitlement gate already exists. **Sell Pro.** If nobody pays for unlimited
 AI actions, nobody will watch an ad for one either — and that costs no build,
 no SDK and no privacy rewrite to find out.
+
+---
+
+# Addendum 2026-10-06 — owner direction: NON-TRACKING, Pinterest-style, free tier only
+
+Owner: *"i want to introduce ads (non tracking) for free tier, its like Pinterest
+style ads."* Recorded so the shape is not re-litigated. **The store blocker above is
+unchanged and is not about tracking** — AdMob will not serve an app that is not
+publicly downloadable, so nothing can be connected before launch whatever the ad type.
+
+## What "non-tracking" actually changes
+
+**Cheaper:**
+- **No ATT prompt on iOS**, and App Store privacy answers become "Data Used to Track
+  You: No" — which is the single biggest privacy-questionnaire difference.
+- No IDFA, so no "limited to users who opted in" revenue cliff.
+
+**NOT cheaper — these survive non-personalization:**
+- The Google Mobile Ads SDK still **auto-merges `AD_ID` into the Android manifest**.
+  Removing it is an explicit `tools:node="remove"` in the manifest, not a default.
+- **Play data-safety still needs a disclosure** for what the SDK collects.
+- **EEA/UK/CH still legally require a certified CMP** (UMP SDK). Consent is about
+  storing and reading on the device, not about personalization — switching ads to
+  non-personalized does not remove it.
+- `site/privacy.html` still needs an advertising processor row.
+
+**And it costs revenue.** Non-personalized inventory clears materially below
+personalized — commonly 30–50% lower eCPM. So non-tracking moves every number in the
+table above **down**, not up. That is the trade, and it is a defensible one; it is just
+not a cheaper way to do ads.
+
+## In-feed is a different economic question from rewarded — and better
+
+The rewarded analysis above does not transfer: in-feed native is low-value per
+impression but **high volume**, where rewarded is the reverse. ⚠️ **Estimated, not
+measured** (our own eCPM is unknown until we serve):
+
+| At 1,000 MAU, ~80% free | Impressions/mo | NPA native eCPM | Revenue/mo |
+|---|---|---|---|
+| India / emerging-weighted | ~70,000 | $0.20–0.60 | **~$15–40** |
+| US / tier-1-weighted | ~70,000 | $1.50–3.00 | ~$100–210 |
+
+So in-feed **can** clear AdMob's $100 payout threshold inside a month in tier-1 geos,
+which rewarded could not. The India-weighted row is the one to plan against.
+
+⚠️ **Set against what the free tier costs:** 800 free users at 3 AI actions/day is
+~$290/month in Haiku tokens. India-weighted ad revenue covers roughly **a tenth** of
+that. Ads do not fund the free tier at our likely geo; the 50-save cap → Pro does.
+Ads are a top-up, and they should be argued for as one.
+
+## The objection that is not about money
+
+**Pinterest's feed is discovery; ours is the user's own saved things.** A Promoted Pin
+is more of what you came for. A promoted tile in Findable sits between two reels *you*
+chose to keep — closer to an ad in a photo album than an ad in a feed. That is a
+product risk no eCPM table answers, and it is the reason to test tolerance before
+buying an SDK.
+
+## The buildable half, available now and free
+
+Build the **slot**, not the network: one tile in the masonry, clearly labelled, that
+renders **our own Pro upsell**. `app/index.tsx` already distributes tiles
+shortest-column-first, so injection is a few lines, and it is **JS — it ships OTA**.
+
+It answers the only two questions that decide the whole thing:
+1. Do people tolerate a non-organic tile in their own library, or does it read as a
+   breach? (Measurable: do free users stop opening the Library?)
+2. Does an in-grid promo convert better than the existing 90%/95% quota nags?
+
+If tolerance is bad, that is learned for the price of an OTA instead of an SDK, a
+privacy rewrite, a CMP and a build. If it is good, the slot is already there the day
+AdMob becomes possible — which is after launch, not before.
+
+## Trigger conditions — unchanged, plus one
+
+The three above still hold (live in store, ≥2,000 MAU or ~10,000 impressions/month,
+geo data in hand). Add: **the house-ad slot has run and tolerance looked acceptable.**
+Fitting an ad network into a slot nobody minds is a different project from discovering
+mid-integration that the slot itself was the problem.
