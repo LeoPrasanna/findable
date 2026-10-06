@@ -610,9 +610,29 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
 - [x] **Promoted tile in the library grid — our own Pro upsell** (owner go-ahead,
   2026-10-06). `components/PromoTile.tsx`, rules in `services/promoSlot.ts`, injected
   into the mosaic in `app/index.tsx`. **JS only, so it ships OTA.** Free tier only,
-  after the 8th tile, never under 10 saves, labelled **PROMOTED**, dismissible for 7
-  days. The ad-network half is blocked on the app being live in a store — see
-  `docs/ADS_RESEARCH.md`.
+  never under 10 saves, labelled **PROMOTED**, dismissible for 7 days. The ad-network
+  half is blocked on the app being live in a store — see `docs/ADS_RESEARCH.md`.
+  - **Density, after the owner saw one tile in a 30-save library and said "just one is
+    not enough" (2026-10-06):** first at the 8th tile, then **one every 10**, capped at
+    6 per grid, never the final tile. 1-in-10 is deliberately sparser than a social
+    feed (Instagram runs nearer 1-in-4) because this is a library of your own things,
+    not a discovery feed — the sparse end is where the honest test is. ⚠️ No
+    authoritative figure for Pinterest's own in-feed density is public; do not let
+    anyone cite one.
+  - ⚠️ **MORE SLOTS NEEDED MORE CARDS, NOT THE SAME CARD MORE OFTEN.** Three
+    creatives rotate (saves, AI-per-day, Ask), each built from the user's OWN live
+    `/usage` limits so the comparison is true for them specifically — and a card whose
+    premise is false for a user is omitted, not softened. Repeating one identical tile
+    would have measured "does the same thing five times annoy people", which has an
+    obvious answer, instead of whether promoted inventory is tolerable here at all.
+  - ⚠️ **The 6-per-grid cap is a HOUSE-AD artefact, not an ad-policy rule.** With
+    three creatives, an uncapped 1-in-10 over a 500-save library repeats them fifty
+    times and reads as a rendering bug. **Delete the cap the day real creatives
+    arrive** — a network supplies a different one every time, and the cap would then be
+    throwing away revenue.
+  - ⚠️ **`PRO_SAVES` and `PRO_AI_PER_DAY` in `promoSlot.ts` mirror `render.yaml` and
+    nothing enforces that.** A promo promising 500 saves while the server grants 300 is
+    not a stale string, it is a false advertisement inside the product.
   - ⚠️ **THE DISMISS RATE IS THE MEASUREMENT, not a convenience.** A real AdMob unit is
     not dismissible; shipping the first one undismissable would have guaranteed a false
     positive about tolerance. The signal that would kill the whole idea is free users

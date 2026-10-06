@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { promoAt, readDismissed, PROMO_SNOOZE_MS } from './promoSlot.ts';
+import { promoSlots, promoCards, readDismissed, PROMO_SNOOZE_MS } from './promoSlot.ts';
 
 /**
  * Self-check for the promo slot's rules. No framework — plain node, the same way
@@ -11,27 +11,68 @@ import { promoAt, readDismissed, PROMO_SNOOZE_MS } from './promoSlot.ts';
  */
 
 const NOW = 1_760_000_000_000;
+const FREE = { saveLimit: 50, aiPerDay: 3, canAsk: false };
 
-// ── who sees it ──────────────────────────────────────────────────────────────
-assert.equal(promoAt(50, 'free', null, NOW), 8, 'a free user with a full library sees it');
-assert.equal(promoAt(50, 'pro', null, NOW), null, 'a paying user is never sold Pro');
-assert.equal(promoAt(50, 'trial', null, NOW), null, 'trial already has the paid numbers');
+// ── who sees them ────────────────────────────────────────────────────────────
+assert.deepEqual(promoSlots(30, 'free', null, NOW, 3), [8, 18, 28], 'free user, 30 saves');
+assert.deepEqual(promoSlots(30, 'pro', null, NOW, 3), [], 'a paying user is never sold Pro');
+assert.deepEqual(promoSlots(30, 'trial', null, NOW, 3), [], 'trial already has the paid numbers');
 // The usage cache starts null, and an unknown tier must not default to "free".
-assert.equal(promoAt(50, null, null, NOW), null, 'unknown tier shows nothing');
-assert.equal(promoAt(50, undefined, null, NOW), null, 'missing tier shows nothing');
+assert.deepEqual(promoSlots(30, null, null, NOW, 3), [], 'unknown tier shows nothing');
+assert.deepEqual(promoSlots(30, undefined, null, NOW, 3), [], 'missing tier shows nothing');
+// Nothing to show means no empty slots.
+assert.deepEqual(promoSlots(30, 'free', null, NOW, 0), [], 'no creatives, no slots');
 
 // ── a small library is not a feed ────────────────────────────────────────────
-assert.equal(promoAt(0, 'free', null, NOW), null, 'empty library');
-assert.equal(promoAt(9, 'free', null, NOW), null, 'just under the threshold');
-assert.equal(promoAt(10, 'free', null, NOW), 8, 'at the threshold');
-// It must never be the last tile in the grid.
-assert.ok((promoAt(10, 'free', null, NOW) as number) < 10 - 1, 'never the final tile');
+assert.deepEqual(promoSlots(0, 'free', null, NOW, 3), [], 'empty library');
+assert.deepEqual(promoSlots(9, 'free', null, NOW, 3), [], 'just under the threshold');
+assert.deepEqual(promoSlots(10, 'free', null, NOW, 3), [8], 'at the threshold, one slot');
 
-// ── dismissal ────────────────────────────────────────────────────────────────
-assert.equal(promoAt(50, 'free', NOW - 1000, NOW), null, 'just dismissed');
-assert.equal(promoAt(50, 'free', NOW - PROMO_SNOOZE_MS + 1, NOW), null, 'inside the snooze');
-assert.equal(promoAt(50, 'free', NOW - PROMO_SNOOZE_MS, NOW), 8, 'snooze expired');
-assert.equal(promoAt(50, 'free', NOW - PROMO_SNOOZE_MS * 10, NOW), 8, 'long expired');
+// ── never the final tile ─────────────────────────────────────────────────────
+for (const total of [10, 11, 18, 19, 20, 29, 30, 31, 100]) {
+  const slots = promoSlots(total, 'free', null, NOW, 3);
+  for (const s of slots) {
+    assert.ok(s < total - 1, `slot ${s} must not be last of ${total}`);
+  }
+}
+
+// ── density and the cap ──────────────────────────────────────────────────────
+assert.deepEqual(promoSlots(20, 'free', null, NOW, 3), [8, 18], 'one every ten');
+// ⚠️ The cap is a house-ad artefact — three creatives cannot fill fifty slots.
+assert.equal(promoSlots(500, 'free', null, NOW, 3).length, 6, 'capped');
+assert.deepEqual(promoSlots(500, 'free', null, NOW, 3), [8, 18, 28, 38, 48, 58], 'capped from the top');
+
+// ── dismissal hides ALL of them, not one ─────────────────────────────────────
+assert.deepEqual(promoSlots(30, 'free', NOW - 1000, NOW, 3), [], 'just dismissed');
+assert.deepEqual(promoSlots(30, 'free', NOW - PROMO_SNOOZE_MS + 1, NOW, 3), [], 'inside the snooze');
+assert.deepEqual(promoSlots(30, 'free', NOW - PROMO_SNOOZE_MS, NOW, 3), [8, 18, 28], 'snooze expired');
+
+// ── the creatives are built from the user's OWN live limits ──────────────────
+const cards = promoCards(FREE);
+assert.equal(cards.length, 3, 'a post-trial free user has three true pitches');
+assert.deepEqual(cards.map(c => c.key), ['saves', 'ai', 'ask'], 'stable keys and order');
+assert.ok(cards[0].headline.includes('500') && cards[0].headline.includes('50'), 'names both numbers');
+assert.ok(cards[0].sub.includes('450'), 'the difference is computed, not written down');
+assert.ok(cards[1].headline.includes('20') && cards[1].headline.includes('3'), 'AI pitch is live');
+
+// A premise that is not true for this user is omitted, never softened.
+assert.deepEqual(
+  promoCards({ saveLimit: 50, aiPerDay: 3, canAsk: true }).map(c => c.key),
+  ['saves', 'ai'],
+  'a user who still has Ask is not told Ask is Pro-only',
+);
+assert.deepEqual(
+  promoCards({ saveLimit: 500, aiPerDay: 20, canAsk: true }).map(c => c.key),
+  [],
+  'nothing to offer someone already at the Pro numbers',
+);
+// A missing /usage payload must not produce "undefined saves instead of null".
+assert.deepEqual(promoCards({}).map(c => c.key), [], 'no live limits, no claims');
+assert.deepEqual(
+  promoCards({ saveLimit: null, aiPerDay: null }).map(c => c.key),
+  [],
+  'unlimited saves (null) is not something to upsell',
+);
 
 // ── stored value, which is user-writable in practice ─────────────────────────
 assert.equal(readDismissed(null, NOW), null, 'nothing stored');
