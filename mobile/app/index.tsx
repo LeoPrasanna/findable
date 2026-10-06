@@ -24,7 +24,8 @@ import { getCachedUsage, onUsage } from '../services/usageCache';
 import { saveQuota, trialOverflow } from '../services/saveQuota';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PromoTile } from '../components/PromoTile';
-import { promoSlots, promoCards, readDismissed, PROMO_ASPECT } from '../services/promoSlot';
+import { promoSlots, promoCards, readDismissed, promoInView, PROMO_ASPECT } from '../services/promoSlot';
+import * as haptics from '../services/haptics';
 import { Avatar } from '../components/Avatar';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, columnsForWidth, themed, gradients, hazeLocations } from '../constants/theme';
 
@@ -194,6 +195,26 @@ ${overflow.body}`);
     // just told us to go away.
     AsyncStorage.setItem(PROMO_KEY, String(at)).catch(() => {});
   }, []);
+
+  /**
+   * THE BUZZ WHEN A PROMOTED TILE COMES INTO VIEW (owner, 2026-10-06, because the
+   * animation alone was "very very subtle" in the hand).
+   *
+   * ⚠️ REFS, NOT STATE, AND THAT IS LOAD-BEARING. This is driven from `onScroll` at a
+   * 32ms throttle; putting either of these in state would re-render a grid of up to
+   * ~30 mounted tiles several times a second and turn a haptic into a scroll stutter.
+   * Nothing here affects what is drawn, so nothing here belongs in state.
+   *
+   * ⚠️ `felt` IS NEVER CLEARED while the screen lives — one buzz per tile, not one per
+   * crossing. The library is the screen people scroll up and down constantly looking
+   * for something; a tile that re-buzzes each pass would make the phone a pager and
+   * would be the fastest way to get the whole format dismissed for the wrong reason.
+   */
+  const promoBoxes = useRef(new Map<number, { y: number; h: number }>()).current;
+  const promoFelt = useRef(new Set<number>()).current;
+  const measurePromo = useCallback((slot: number, y: number, h: number) => {
+    promoBoxes.set(slot, { y, h });
+  }, [promoBoxes]);
 
   /**
    * ⚠️ A REFRESH MUST NOT SHRINK THE LIST — this used to throw you back to the
@@ -683,6 +704,14 @@ ${overflow.body}`);
             const nearBottom =
               contentOffset.y + layoutMeasurement.height >= contentSize.height - layoutMeasurement.height * 1.5;
             if (nearBottom) loadMore();
+            // A promoted tile has scrolled into view: buzz once, so the PROMOTED
+            // label gets looked at. promoInView() owns the geometry and the
+            // at-most-one rule; promoFelt owns "once per tile".
+            const slot = promoInView(promoBoxes, promoFelt, contentOffset.y, layoutMeasurement.height);
+            if (slot !== null) {
+              promoFelt.add(slot);
+              haptics.promo();
+            }
           }}
           refreshControl={
             <RefreshControl
@@ -703,6 +732,8 @@ ${overflow.body}`);
                     card={promoCreatives[tile.slot % promoCreatives.length]}
                     onPress={() => router.push('/pro')}
                     onDismiss={dismissPromo}
+                    slot={tile.slot}
+                    onMeasure={measurePromo}
                   />
                 ) : (
                   <ReelCard

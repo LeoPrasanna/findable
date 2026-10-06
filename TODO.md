@@ -730,19 +730,43 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
     edge breathes, and the whole tile lifts very slightly — both loops on the NATIVE
     driver (transform and opacity only), because up to 6 are mounted at once and six
     JS-driven loops would be a measurable scroll stutter.
-    - ⚠️ **IT SHIPS AT `'lively'`, NOT `'loud'`, AND THAT IS A DELIBERATE DISAGREEMENT
-      WITH THE BRIEF.** A tile engineered to annoy destroys the only thing this slot is
-      for: the dismiss rate is supposed to measure whether promoted inventory is
-      tolerable in a grid of your own saves, and if the tile is deliberately irritating
-      then it measures the ANIMATION instead. The finding becomes "annoying things
-      annoy people", which needed no OTA, and the number that would have told us
-      whether to buy an ad SDK is gone. It is also the wrong trade against retention:
-      the library is the screen people open to find something, and a shouting tile in
-      the middle of it trains them to stop opening it — costing the saves, the AI
-      actions and the subscription to win a few taps on a house ad.
-    - **`PROMO_INTENSITY` in `promoSlot.ts` is the dial:** `'calm' | 'lively' | 'loud'`.
-      Setting it to `'loud'` is one word and one OTA, and makes it faster, bigger and
-      harder to ignore. The owner's call; this records which shipped and why.
+    - It shipped at `'lively'` and that was wrong on a real device — owner, 2026-10-06:
+      **"your animation is very very subtle"**. A sheen tuned on a desk reads as nothing
+      in a hand, on a bright screen, among photographs. **`PROMO_INTENSITY` in
+      `promoSlot.ts` is now `'loud'`**; the dial is `'calm' | 'lively' | 'loud'` and any
+      of them is one word and one OTA.
+    - ⚠️ **WHAT `'loud'` COSTS, so the trade stays visible:** the dismiss rate is this
+      slot's only measurement — whether promoted inventory is tolerable in a grid of
+      your own saves. The louder the tile, the more that number measures the ANIMATION
+      rather than the format, and the format is the question worth an ad SDK. It is also
+      a bet against retention: the library is the screen people open to find something,
+      and a shouting tile in the middle of it trains them to stop opening it. **If
+      dismissals come in high, try `'calm'` before concluding promoted tiles don't work
+      here.**
+  - [x] **It vibrates when one comes into view** (owner, 2026-10-06, because the
+    animation alone was too subtle). A **double pulse** — `haptics.promo()`, two
+    `Medium` impacts 130ms apart — unlike every other haptic in the app, all of which
+    are single events, so the pattern can be learned.
+    - ⚠️ **A BUZZ CANNOT SAY "ADVERT", and the owner's reasoning for it ("that way user
+      will understand it's a promoted slot") does not hold on its own.** A vibration
+      carries no semantics; it says *something happened*. The **PROMOTED** label is what
+      says what it is — the haptic only makes someone look at the label. That is still
+      worth it, but if the goal is comprehension the label is the thing to improve.
+    - ⚠️ **ONCE PER TILE PER SESSION, never once per crossing** (`promoFelt` in
+      `app/index.tsx`). The library is scrolled up and down constantly; a tile that
+      re-buzzed each pass would make the phone a pager and get the format dismissed for
+      the wrong reason. Max ~6 buzzes in a long library, and a dismissal silences all of
+      them for 7 days.
+    - The grid is a `ScrollView`, so there is no `onViewableItemsChanged`: each tile
+      reports its box from `onLayout` and **`promoInView()` in `promoSlot.ts`** decides
+      visibility from the scroll offset. Pure and tested, because a haptic for an
+      off-screen tile is a phone buzzing for no visible reason — indistinguishable from
+      a bug. Boxes and fired-slots are **refs, not state**: this runs from `onScroll` at
+      32ms, and state would re-render ~30 mounted tiles several times a second.
+    - ⚠️ **NO IN-APP OFF SWITCH, by omission not decision.** iOS gates impact haptics
+      behind System Haptics; Android's `Vibrator` is **not** gated by the touch-feedback
+      setting, so an Android user who dislikes it can only dismiss the tile. If anyone
+      complains, that is the fix — not a settings row.
     - ⚠️ **REDUCE MOTION IS HONOURED AND IS NOT NEGOTIABLE WITH THE BRIEF.** A
       sweeping, pulsing tile is exactly what triggers nausea and migraine for people
       with vestibular disorders, and both platforms expose the setting so apps can
