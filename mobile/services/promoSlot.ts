@@ -54,6 +54,40 @@ const EVERY = 10;
  */
 const MAX_PROMOS = 6;
 
+/**
+ * HOW HARD THE TILE SHOUTS. Owner asked for "flashy and animated and moving... may be
+ * bit annoyingly" (2026-10-06).
+ *
+ * ⚠️ IT SHIPS AT 'lively', NOT 'loud', AND THAT IS A DELIBERATE DISAGREEMENT WITH
+ * THE BRIEF. A tile engineered to annoy destroys the only thing this slot is for. The
+ * dismiss rate is the measurement — whether promoted inventory is tolerable in a grid
+ * of the user's own saves — and if the tile is deliberately irritating then the
+ * dismiss rate measures the ANIMATION, not the format. You learn "annoying things
+ * annoy people", which nobody needed an OTA to find out, and you lose the number that
+ * would have told you whether to buy an ad SDK at all.
+ *
+ * It is also the wrong trade against the product: the library is the screen people
+ * open to find something they saved, and a shouting tile in the middle of it trains
+ * them to stop opening it. That costs the saves, the AI actions and the subscription,
+ * to win a few taps on a house ad.
+ *
+ * So: 'lively' is visibly animated — a sheen sweep, a breathing accent edge, a tile
+ * that moves. **Set this to 'loud' and it gets faster, bigger and harder to ignore,
+ * which is one word and one OTA away if the owner still wants it.** Both are honest
+ * positions; this file records which one shipped and why.
+ */
+export type PromoIntensity = 'calm' | 'lively' | 'loud';
+export const PROMO_INTENSITY: PromoIntensity = 'lively';
+
+/** Durations and amplitudes per level. Shorter sweep + bigger pulse = louder. */
+export const PROMO_MOTION: Record<PromoIntensity, {
+  sweepMs: number; restMs: number; pulseMs: number; pulseTo: number; liftTo: number;
+}> = {
+  calm:   { sweepMs: 2600, restMs: 4200, pulseMs: 2800, pulseTo: 0.35, liftTo: 1.000 },
+  lively: { sweepMs: 1500, restMs: 1400, pulseMs: 1600, pulseTo: 0.70, liftTo: 1.015 },
+  loud:   { sweepMs:  850, restMs:  250, pulseMs:  750, pulseTo: 1.00, liftTo: 1.035 },
+};
+
 /** The tile's shape. One of ReelCard's own RATIOS, so it cannot disturb the grid's
  *  rhythm by introducing a fifth proportion nothing else uses. */
 export const PROMO_ASPECT = 4 / 5;

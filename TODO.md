@@ -722,9 +722,33 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
     times and reads as a rendering bug. **Delete the cap the day real creatives
     arrive** — a network supplies a different one every time, and the cap would then be
     throwing away revenue.
-  - ⚠️ **`PRO_SAVES` and `PRO_AI_PER_DAY` in `promoSlot.ts` mirror `render.yaml` and
-    nothing enforces that.** A promo promising 500 saves while the server grants 300 is
-    not a stale string, it is a false advertisement inside the product.
+  - [x] **Both Pro numbers now come from the server** (`/usage` -> `pro`), so the
+    promo cannot advertise a cap the server does not grant. The hardcoded
+    `PRO_SAVES = 500` is gone.
+  - [x] **It animates** (owner, 2026-10-06: "make it more flashy and animates and
+    moving... may be bit annoyingly"). A diagonal sheen sweeps the tile, the accent
+    edge breathes, and the whole tile lifts very slightly — both loops on the NATIVE
+    driver (transform and opacity only), because up to 6 are mounted at once and six
+    JS-driven loops would be a measurable scroll stutter.
+    - ⚠️ **IT SHIPS AT `'lively'`, NOT `'loud'`, AND THAT IS A DELIBERATE DISAGREEMENT
+      WITH THE BRIEF.** A tile engineered to annoy destroys the only thing this slot is
+      for: the dismiss rate is supposed to measure whether promoted inventory is
+      tolerable in a grid of your own saves, and if the tile is deliberately irritating
+      then it measures the ANIMATION instead. The finding becomes "annoying things
+      annoy people", which needed no OTA, and the number that would have told us
+      whether to buy an ad SDK is gone. It is also the wrong trade against retention:
+      the library is the screen people open to find something, and a shouting tile in
+      the middle of it trains them to stop opening it — costing the saves, the AI
+      actions and the subscription to win a few taps on a house ad.
+    - **`PROMO_INTENSITY` in `promoSlot.ts` is the dial:** `'calm' | 'lively' | 'loud'`.
+      Setting it to `'loud'` is one word and one OTA, and makes it faster, bigger and
+      harder to ignore. The owner's call; this records which shipped and why.
+    - ⚠️ **REDUCE MOTION IS HONOURED AND IS NOT NEGOTIABLE WITH THE BRIEF.** A
+      sweeping, pulsing tile is exactly what triggers nausea and migraine for people
+      with vestibular disorders, and both platforms expose the setting so apps can
+      stop. Someone who asked their OS for less motion gets the same copy and the same
+      offer with no movement at all. Attention-grabbing is a preference; this is an
+      accessibility floor.
   - ⚠️ **THE DISMISS RATE IS THE MEASUREMENT, not a convenience.** A real AdMob unit is
     not dismissible; shipping the first one undismissable would have guaranteed a false
     positive about tolerance. The signal that would kill the whole idea is free users
