@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
-import { PROMO_ASPECT } from '../services/promoSlot';
+import { PROMO_ASPECT, type PromoCard } from '../services/promoSlot';
 import { colors, spacing, font, radius, tracking, typeface, themed, gradients, hazeLocations } from '../constants/theme';
 
 /**
@@ -27,11 +27,14 @@ import { colors, spacing, font, radius, tracking, typeface, themed, gradients, h
  * this adds no asset and no new idiom.
  */
 interface Props {
+  /** Which creative to render. Built from the user's OWN live limits in
+   *  services/promoSlot.ts, so the comparison is true for them specifically. */
+  card: PromoCard;
   onPress: () => void;
   onDismiss: () => void;
 }
 
-function PromoTileInner({ onPress, onDismiss }: Props) {
+function PromoTileInner({ card, onPress, onDismiss }: Props) {
   return (
     <Pressable
       style={styles.frame}
@@ -73,10 +76,13 @@ function PromoTileInner({ onPress, onDismiss }: Props) {
 
       <View style={styles.body}>
         <Icon name="sparkles" size={20} color={colors.accentLight} />
-        {/* The number is the offer. "Go Pro" says nothing a free user can act on;
-            "500 saves" is the wall they have actually met. */}
-        <Text style={styles.headline}>500 saves{'\n'}instead of 50</Text>
-        <Text style={styles.sub}>Findable Pro — more room, more AI every day.</Text>
+        {/* ⚠️ THE NUMBER IS THE OFFER, AND IT IS THE USER'S OWN NUMBER. "Go Pro" says
+            nothing a free user can act on; "500 saves instead of 50" names the wall
+            they have actually met. The free half comes from the live /usage payload
+            rather than a constant, so it can never contradict what the app is
+            enforcing on them — see promoCards(). */}
+        <Text style={styles.headline}>{card.headline}</Text>
+        <Text style={styles.sub}>{card.sub}</Text>
       </View>
 
       <View style={styles.cta}>

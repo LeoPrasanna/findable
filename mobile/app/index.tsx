@@ -24,7 +24,7 @@ import { getCachedUsage, onUsage } from '../services/usageCache';
 import { saveQuota } from '../services/saveQuota';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PromoTile } from '../components/PromoTile';
-import { promoAt, readDismissed, PROMO_ASPECT } from '../services/promoSlot';
+import { promoSlots, promoCards, readDismissed, PROMO_ASPECT } from '../services/promoSlot';
 import { Avatar } from '../components/Avatar';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, columnsForWidth, themed, gradients, hazeLocations } from '../constants/theme';
 
@@ -39,7 +39,7 @@ const PROMO_KEY = '@findable:promo:dismissedAt';
  *  reel does, which is the whole point of the format — see services/promoSlot.ts. */
 type Tile =
   | { reel: Reel; aspect: number; idx: number }
-  | { promo: true; aspect: number };
+  | { promo: true; aspect: number; slot: number };
 
 /** Category names are stored lowercase; sentence copy needs them capitalised.
  *  Single word by definition (see ALLOWED_CATEGORIES on the backend), so this
@@ -125,6 +125,24 @@ ${body}`);
       .then(raw => setPromoSnooze(readDismissed(raw, Date.now())))
       .catch(() => setPromoSnooze(null));   // unreadable storage must not hide the slot forever
   }, []);
+
+  /**
+   * The promo creatives, from the user's OWN limits.
+   *
+   * ⚠️ MORE SLOTS NEEDED MORE CARDS, NOT THE SAME CARD MORE OFTEN (owner,
+   * 2026-10-06: "just one is not enough"). Repeating one identical tile would have
+   * measured "does the same thing five times annoy people", which has an obvious
+   * answer, rather than whether promoted inventory is tolerable here at all. A network
+   * rotates creatives; so do we.
+   */
+  const promoCreatives = useMemo(
+    () => promoCards({
+      saveLimit: usage?.saves?.limit,
+      aiPerDay: usage?.limit,
+      canAsk: usage?.features?.ask,
+    }),
+    [usage?.saves?.limit, usage?.limit, usage?.features?.ask],
+  );
 
   const dismissPromo = useCallback(() => {
     const at = Date.now();
@@ -361,21 +379,24 @@ ${body}`);
       return shortest;
     };
     /**
-     * The promoted tile is placed BY THE SAME RULE as a real one — shortest column
-     * first, inline in the flow. That is what makes it Pinterest-shaped instead of a
-     * banner, and it is also why it cannot be pinned to a position on screen: the
-     * grid decides where it lands, exactly as it does for everything else.
+     * Promoted tiles are placed BY THE SAME RULE as real ones — shortest column
+     * first, inline in the flow. That is what makes them Pinterest-shaped instead of
+     * banners, and it is also why they cannot be pinned to a position on screen: the
+     * grid decides where each one lands, exactly as it does for everything else.
      *
      * `undefined` snooze means storage has not answered yet — see promoSnooze.
      */
-    const promo = promoSnooze === undefined
-      ? null
-      : promoAt(reels.length, usage?.tier, promoSnooze, Date.now());
+    const slots = promoSnooze === undefined
+      ? []
+      : promoSlots(reels.length, usage?.tier, promoSnooze, Date.now(), promoCreatives.length);
+    // index in the list -> which slot number it is, so the creative can rotate.
+    const slotAt = new Map(slots.map((idx, n) => [idx, n]));
 
     reels.forEach((reel, idx) => {
-      if (idx === promo) {
+      const slot = slotAt.get(idx);
+      if (slot !== undefined) {
         const c = shortestCol();
-        cols[c].push({ promo: true, aspect: PROMO_ASPECT });
+        cols[c].push({ promo: true, aspect: PROMO_ASPECT, slot });
         heights[c] += 1 / PROMO_ASPECT;
       }
       const aspect = aspectFor(reel);
@@ -384,7 +405,7 @@ ${body}`);
       heights[c] += 1 / aspect;   // height in width-units
     });
     return cols;
-  }, [reels, numColumns, usage?.tier, promoSnooze]);
+  }, [reels, numColumns, usage?.tier, promoSnooze, promoCreatives]);
 
   if (!entered) {
     // ⚠️ `emitUi('libraryState')` IS LOAD-BEARING, not a tidy-up. The tab bar
@@ -627,7 +648,8 @@ ${body}`);
               <View key={ci} style={styles.column}>
                 {col.map(tile => ('promo' in tile ? (
                   <PromoTile
-                    key="promo"
+                    key={`promo-${tile.slot}`}
+                    card={promoCreatives[tile.slot % promoCreatives.length]}
                     onPress={() => router.push('/pro')}
                     onDismiss={dismissPromo}
                   />
