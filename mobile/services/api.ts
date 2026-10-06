@@ -540,6 +540,20 @@ export const api = {
   deleteTodo: (id: string) =>
     request<{ message: string }>(`/api/todos/${id}`, { method: 'DELETE' }),
 
+  // ── Billing ───────────────────────────────────────────────
+  /**
+   * Ask the server to confirm this user's purchase with RevenueCat and stamp the
+   * tier now.
+   *
+   * ⚠️ CALLED AFTER A PURCHASE BECAUSE THE WEBHOOK IS TOO SLOW TO BE A PURCHASE
+   * FLOW. RevenueCat's webhook lands asynchronously and the tier it writes only
+   * reaches the app on the next JWT refresh (≤1h), so without this a user who has
+   * just paid keeps seeing the free tier with a receipt in their hand. Grant-only
+   * on the server — it can never downgrade anyone. See backend/app/routes/billing.py.
+   */
+  syncBilling: () =>
+    request<{ tier: 'pro' | null; active: boolean }>('/api/billing/sync', { method: 'POST' }, 20000),
+
   // ── Account ───────────────────────────────────────────────
   getUsage: () => request<Usage>('/api/account/usage'),
 

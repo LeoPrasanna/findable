@@ -45,6 +45,14 @@ class Settings:
     # "Authorization header value"). Empty = the billing webhook rejects every
     # call, so it's fail-closed until you configure it.
     REVENUECAT_WEBHOOK_TOKEN: str = os.getenv("REVENUECAT_WEBHOOK_TOKEN", "")
+    # RevenueCat v1 REST **secret** key (dashboard → API keys → secret). Used by
+    # POST /api/billing/sync to ask RevenueCat what a user is entitled to, instead
+    # of waiting for the webhook. Empty = /sync returns 503 and the webhook stays
+    # the only path. ⚠️ SECRET, not the public SDK key the app ships.
+    REVENUECAT_API_KEY: str = os.getenv("REVENUECAT_API_KEY", "")
+    # The entitlement identifier configured in RevenueCat that means "Pro". Must
+    # match the dashboard exactly; a typo silently entitles nobody.
+    REVENUECAT_PRO_ENTITLEMENT: str = os.getenv("REVENUECAT_PRO_ENTITLEMENT", "pro")
     ENV: str = os.getenv("ENV", "development")
     # Comma-separated browser origins allowed in production (the deployed web app's
     # URL). "*" allows any origin — acceptable while there's no cookie-based auth.

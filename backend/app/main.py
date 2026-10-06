@@ -12,6 +12,7 @@ from app.routes.workout import router as workout_router
 from app.routes.ask import router as ask_router
 from app.routes.account import router as account_router
 from app.routes.todos import router as todos_router
+from app.routes.billing import router as billing_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,6 +61,10 @@ app.include_router(workout_router)
 app.include_router(ask_router)
 app.include_router(account_router)
 app.include_router(todos_router)
+# Billing is fail-closed by configuration, not by registration: the webhook
+# rejects every call without REVENUECAT_WEBHOOK_TOKEN and /sync 503s without
+# REVENUECAT_API_KEY. See app/routes/billing.py.
+app.include_router(billing_router)
 
 
 @app.on_event("startup")

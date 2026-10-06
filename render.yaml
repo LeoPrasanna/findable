@@ -84,6 +84,14 @@ services:
         sync: false
       - key: SENTRY_DSN            # optional (error monitoring; empty = disabled)
         sync: false
+      # ── Billing. Both are REQUIRED before anyone can buy Pro, and both are
+      # fail-closed while unset: the webhook 401s every call and /sync 503s.
+      - key: REVENUECAT_WEBHOOK_TOKEN   # shared secret, must match the RC webhook header
+        sync: false
+      - key: REVENUECAT_API_KEY         # RC v1 REST SECRET key (never the app's public key)
+        sync: false
+      - key: REVENUECAT_PRO_ENTITLEMENT # code default: pro
+        value: "pro"
 
   # ── PRODUCTION (deferred until launch — commented out on purpose) ───────────
   # Kept out of the active blueprint so it stays 100% free-tier for now: a paid
@@ -134,5 +142,11 @@ services:
   #       sync: false
   #     - key: APIFY_API_KEY
   #       sync: false
+  #     - key: REVENUECAT_WEBHOOK_TOKEN
+  #       sync: false
+  #     - key: REVENUECAT_API_KEY
+  #       sync: false
+  #     - key: REVENUECAT_PRO_ENTITLEMENT
+  #       value: "pro"
   #     - key: SENTRY_DSN
   #       sync: false

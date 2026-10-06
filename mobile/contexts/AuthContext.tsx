@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import { api } from '../services/api';
 import { resetSessionFlags } from '../services/sessionFlags';
+import * as billing from '../services/billing';
 import { refreshUsage, clearUsage } from '../services/usageCache';
 import { clearLibraryEdits } from '../services/libraryEdits';
 import { clearLibraryIndex } from '../services/libraryIndex';
@@ -103,6 +104,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Warm the account state (tier, AI budget, counts) the moment we know who
       // this is — see the note on the SIGNED_IN branch below.
       if (data.session) {
+        /**
+         * ⚠️ REVENUECAT MUST KNOW THE SUPABASE USER ID, and this is where it
+         * learns it. The billing webhook decides WHOSE tier to change from
+         * `event.app_user_id`; if the SDK is left to invent an anonymous id, a
+         * real purchase arrives at the server attached to nobody and the money is
+         * taken with no entitlement granted. Both branches below call it —
+         * cold start as well as SIGNED_IN — because a returning user never fires
+         * a SIGNED_IN event.
+         */
+        billing.identify(data.session.user.id);
         refreshUsage();
         // Re-minted on EVERY launch, not only at sign-in. The server snapshots
         // the tier and quota identity into the key (a share-key request has no
@@ -138,13 +149,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        * must not wait on a meter, and a signed-in user with an unreachable
        * backend still gets their app.
        */
-      if (event === 'SIGNED_IN') { refreshUsage(); ensureShareKey(); }
+      if (event === 'SIGNED_IN') {
+        if (next?.user?.id) billing.identify(next.user.id);   // see the cold-start note above
+        refreshUsage(); ensureShareKey();
+      }
       // Never let the next account inherit the previous one's tier or counts,
       // a pending delete / category override from their library, or the
       // ability to keep saving into their account silently from the share sheet.
       if (event === 'SIGNED_OUT') {
         clearUsage(); clearLibraryEdits(); clearShareKey(); clearLibraryIndex();
         clearThumbRefreshes();
+        // Same reason as the rest of this list: the next account on this device
+        // must not inherit the last one's purchase identity.
+        billing.forget();
       }
 
       setSession(next);

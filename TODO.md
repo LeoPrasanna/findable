@@ -377,36 +377,74 @@ Owner testing 1.0.12 on 2026-09-25.
 - [x] **The `FREE_SAVE_LIMIT=500` override is GONE** (owner, 2026-09-13). Staging now
   runs the real numbers: **free 50, pro 500**, both stated explicitly in `render.yaml`
   rather than inherited from `config.py`. ⚠️ **A free account that reaches 50 now gets a
-  403 offering a product that cannot be bought** — `app/pro.tsx` renders a paywall with
-  no purchase flow behind it. That is the accepted trade: testing the real wall beats
-  hiding it. It stops being acceptable the moment a real user is behind it, which makes
-  RevenueCat below the true gate on public launch.
+  403 offering a product that cannot be bought** — and as of 2026-10-06 that library
+  also **locks** rather than merely refusing new saves. That is the accepted trade:
+  testing the real wall beats hiding it. The purchase flow behind the paywall is now
+  built (see RevenueCat below); what is still missing is the store configuration, so the
+  wall stops being acceptable the moment a real user is behind it.
 
 
 
 
-- [~] 🔴 👤 **RevenueCat — deliberately AFTER testing, on the move to production**
-  (owner, 2026-09-13). ⚠️ Until it exists, free accounts hit a hard 50-save wall with no
-  way to buy past it (see the save-caps item above). That is fine for TestFlight and not
-  fine for a public listing, so this is the real gate on launch — not a follow-up.
-  Manages IAP entitlements, per-territory pricing and promo experiments across
-  iOS/Android. **No quota code change needed** — `daily_limit_for()`
-  already reads `app_metadata.tier`.
-  **The webhook is written but is a SKETCH and is NOT wired** — `app/routes/billing.py`
-  exists and is deliberately not registered, because it mints revenue entitlements. Four
-  preconditions, all required:
-  1. **Mobile must call `Purchases.logIn(supabaseUserId)`** at login. If RevenueCat
-     generates an anonymous id, `event.app_user_id` can't be mapped back to a Supabase
-     user and the webhook logs a warning and does nothing.
-  2. Set `REVENUECAT_WEBHOOK_TOKEN` (plus the existing `SUPABASE_URL` /
-     `SUPABASE_SERVICE_ROLE_KEY`). ⚠️ Auth is a shared secret compared constant-time and
-     **fail-closed** — an unset token rejects every call, which is the safe default but
-     also means it silently does nothing until configured.
-  3. Register the router in `app/main.py`.
-  4. In RevenueCat: Integrations → Webhooks → point at
-     `https://<backend>/api/billing/revenuecat` with the same Authorization value.
-  ⚠️ Tier takes effect on the user's **next token refresh (≤1h) or re-login**, not
-  instantly — the JWT claim is what `entitlements.py` reads.
+- [~] 🔴 👤 **RevenueCat — the CODE IS DONE (2026-10-07); what remains is
+  dashboard work and two prices.** This is still the real gate on public launch: a free
+  account at the 50-save wall is shown a paywall, and until the steps below are done
+  that paywall cannot take money.
+  - [x] **SDK wired.** `react-native-purchases@10.11.0`, `services/billing.ts` wraps it
+    and every export is safe to call when billing does not exist (web, no keys, SDK
+    failed to init) — the paywall then renders read-only rather than crashing.
+  - [x] **`Purchases.logIn(supabaseUserId)` at login** — `contexts/AuthContext.tsx`, on
+    SIGNED_IN **and on cold start**, because a returning user never fires SIGNED_IN. This
+    was precondition 1: without it a real purchase arrives at the webhook attached to
+    nobody and the money is taken with no entitlement granted.
+  - [x] **Webhook registered** in `app/main.py`. ⚠️ Registration is safe because it is
+    **fail-closed by configuration**, not by being unwired: the webhook 401s every call
+    without `REVENUECAT_WEBHOOK_TOKEN` and `/sync` 503s without `REVENUECAT_API_KEY`.
+  - [x] **`POST /api/billing/sync` — the purchase flow's actual grant path.**
+    ⚠️ **THE WEBHOOK IS TOO SLOW TO BE A PURCHASE FLOW.** It lands asynchronously and
+    the tier it writes only reaches the app on the next JWT refresh (≤1h), so without
+    this a user who has just paid keeps seeing the free tier with a receipt in their
+    hand. The app now calls `/sync` right after a purchase or restore; the server asks
+    RevenueCat server-to-server, stamps the tier, and the app re-mints its session.
+    ⚠️ **IT GRANTS BUT NEVER REVOKES.** `scripts/set_tier.py` is how the owner's own
+    account and every test account became pro, and RevenueCat has never heard of those.
+    A sync that downgraded on "no entitlement found" would wipe them the first time
+    anyone tapped Restore. Only the webhook's EXPIRATION revokes.
+    `test_sync_never_downgrades` is the test that keeps it that way.
+  - [x] **The mock card form is DELETED** (`app/pro.tsx` is one page now). A form that
+    looks real and does nothing is how someone types a real card into a dead field, and
+    no TEST MODE banner is reliably louder than muscle memory. It also had nothing to
+    do: digital goods go through StoreKit / Play Billing or they get rejected at review.
+  - [x] **The store owns the price now.** `constants/pricing.ts` is the authored fallback
+    and the copy source; once an offering loads, the displayed price is
+    `product.priceString` and the renewal sentence is built by `storeTerms()`.
+    ⚠️ **THE AUTHORED NUMBERS ARE CHOSEN BY DEVICE LOCALE; APPLE AND GOOGLE CHARGE BY
+    THE ACCOUNT'S STOREFRONT.** An Indian phone signed into a US App Store was being
+    shown ₹99 and would have been billed $7 — a refund request and a review rejection.
+  - [ ] 👤 **Dashboard work, which is yours and cannot be done from here:** create the
+    RevenueCat project, add the iOS + Android apps, create the `pro` entitlement and the
+    two products, then set `EXPO_PUBLIC_RC_IOS_KEY` / `EXPO_PUBLIC_RC_ANDROID_KEY` in
+    EAS and `REVENUECAT_WEBHOOK_TOKEN` / `REVENUECAT_API_KEY` on Render. Point
+    Integrations → Webhooks at `https://<backend>/api/billing/revenuecat` with the same
+    Authorization value.
+  - [ ] ⚠️ **MERGING THIS BLOCKS ALL OTAs UNTIL BOTH PLATFORMS ARE REBUILT.**
+    `react-native-purchases` is a native module, so the Android fingerprint moved
+    `7bc363b6…` → `7bc09f03…` (measured 2026-10-07, `fingerprint:compare` against
+    build 14). Budget one Android build from the 15/month and one iOS build. See
+    "EAS BUILD BUDGET".
+  - **On the RevenueCat Test Store** (owner asked, 2026-10-07): it removes the need for
+    App Store / Play product setup, so the whole purchase → `/sync` → tier loop becomes
+    testable before prices are decided. ⚠️ **But it only runs in a DEVELOPMENT build.**
+    The SDK does not degrade when it finds a test key in a release build — it logs,
+    alerts and then **crashes on purpose**, keyed on how the app was COMPILED, not how
+    it was distributed, so TestFlight and every Play testing track crash too.
+    `billingPlans.ts::billingKey` therefore gates the test key behind `__DEV__`, which
+    makes that mistake unrepresentable; `forceAllowTestStoreInReleaseBuilds` would undo
+    it and is deliberately unused, because the preview APK is an artifact we hand to
+    other people. **Recommendation: skip it.** It costs a dev build plus
+    `expo-dev-client` to buy a few days of earlier feedback, when the two prices below
+    are the only thing standing between here and testing against the real Apple sandbox
+    on builds that already ship.
 - [x] 🔴 👤 **Apple Small Business Program.** Enrolled — **15%**, not 30%. Every margin
   below assumes this.
 - [ ] 👤 **Two intro prices still unset — deliberately not guessed.** The **USD monthly
@@ -414,6 +452,12 @@ Owner testing 1.0.12 on 2026-09-25.
   **weekly** plans carry an offer at all. A plan without `introMonths` renders the plain
   renewal sentence, which is true for a plan with no offer — so the gap is safe, just
   incomplete. Needed before App Store Connect setup.
+  ⚠️ **AS OF 2026-10-07 THIS IS THE CRITICAL PATH, not a loose end.** The purchase code
+  is built and tested; store products cannot be created without these two numbers, and
+  without store products nothing can be bought. Everything else on the launch list is
+  waiting behind one decision. Note also that `storeTerms()` now derives the disclosure
+  sentence from the store's own `introPrice`, so once the products exist the intro terms
+  are read from App Store Connect rather than kept in sync by hand here.
 - [~] **Free auto-summary gating — built, then REVERTED the same day (owner).**
   The 2026-07-24 cost study still stands: break-even at **~4.2% conversion
   gated vs ~7.8% ungated**, against a 2–5% freemium norm — so ungated is likely
