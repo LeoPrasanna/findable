@@ -1,7 +1,17 @@
 """RevenueCat webhook → stamp `app_metadata.tier` in Supabase.
 
-⚠️ SKETCH — not wired into `main.py` yet. This endpoint MINTS revenue
-entitlements, so review + configure secrets before registering it.
+⚠️ THIS MINTS REVENUE ENTITLEMENTS. It is registered in `main.py` and
+**fail-closed by configuration**: the webhook rejects every call while
+`REVENUECAT_WEBHOOK_TOKEN` is unset, and `/sync` returns 503 while
+`REVENUECAT_API_KEY` is unset. Registering it is therefore safe; configuring it
+is the act that turns billing on.
+
+Two paths in, on purpose
+------------------------
+* **`POST /sync`** — the user's own app, right after a purchase or a restore. Asks
+  RevenueCat directly, so the grant is immediate and deterministic. GRANT-ONLY.
+* **`POST /revenuecat`** — RevenueCat's webhook, for everything that happens when
+  the app is not open: renewals, expirations, refunds. The only path that revokes.
 
 What this replaces
 ------------------
@@ -17,11 +27,11 @@ Wiring preconditions (all required before this works)
    app lets RevenueCat generate an anonymous id, we can't map the purchase back
    to a Supabase user. Configure this at login (Purchases.logIn(supabaseUserId)).
 2. **Env vars:** `REVENUECAT_WEBHOOK_TOKEN` (shared secret you set in the
-   RevenueCat dashboard's webhook "Authorization header value"), plus the
-   existing `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
-3. **Register the router** in `app/main.py`:
-       from app.routes.billing import router as billing_router
-       app.include_router(billing_router)
+   RevenueCat dashboard's webhook "Authorization header value") and
+   `REVENUECAT_API_KEY` (the v1 REST **secret** key, for `/sync`), plus the
+   existing `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Also
+   `REVENUECAT_PRO_ENTITLEMENT` if the entitlement is not called `pro`.
+3. ✅ Router registered in `app/main.py`.
 4. In RevenueCat: Integrations → Webhooks → point at
    `https://<your-backend>/api/billing/revenuecat`, set the Authorization value
    to the same secret as `REVENUECAT_WEBHOOK_TOKEN`.
@@ -32,10 +42,12 @@ reads (see `tier_for`).
 """
 import hmac
 import logging
+from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
+from app.auth import get_current_user, AuthUser
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -110,3 +122,86 @@ async def revenuecat_webhook(request: Request, authorization: str = Header(defau
         logger.info("[BILLING] %s → no tier change for %s", event_type, user_id)
 
     return {"status": "ok"}
+
+
+def _entitlement_active(subscriber: dict, name: str) -> bool:
+    """Whether `name` is an entitlement this subscriber currently holds.
+
+    RevenueCat keeps expired entitlements in the payload with a past
+    `expires_date`, so presence is not entitlement. A null `expires_date` is a
+    lifetime/non-renewing grant and counts as active.
+    """
+    ent = ((subscriber or {}).get("entitlements") or {}).get(name)
+    if not isinstance(ent, dict):
+        return False
+    expires = ent.get("expires_date")
+    if not expires:
+        return True
+    try:
+        when = datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
+    except ValueError:
+        # An unparseable date must not silently entitle someone. Treat it as
+        # inactive and let the webhook be the authority.
+        logger.warning("[BILLING] unparseable expires_date=%r for %r", expires, name)
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return when > datetime.now(timezone.utc)
+
+
+@router.post("/sync")
+def sync_entitlement(user: AuthUser = Depends(get_current_user)):
+    """Ask RevenueCat what THIS user is entitled to, now, and stamp the tier.
+
+    ⚠️ THIS EXISTS BECAUSE THE WEBHOOK IS TOO SLOW TO BE A PURCHASE FLOW. The
+    webhook arrives asynchronously and the tier it writes only reaches the app on
+    the next JWT refresh (<=1h) — so a user who has just paid would keep seeing the
+    free tier, with a receipt in their hand. That is the worst bug this app could
+    have. The client calls this immediately after a purchase or a restore, then
+    refreshes its Supabase session, and the grant is deterministic rather than a
+    race against a webhook.
+
+    ⚠️ IT GRANTS BUT NEVER REVOKES, deliberately and asymmetrically.
+    `scripts/set_tier.py` stamps tiers by hand (it is how the owner's own account
+    and every test account became pro), and RevenueCat knows nothing about those.
+    A sync that downgraded on "no entitlement found" would wipe them the first time
+    anyone tapped Restore. Revocation stays with the webhook's EXPIRATION event,
+    which is the only signal that actually means an entitlement ended.
+
+    ⚠️ THE USER ID IS TAKEN FROM THE VERIFIED JWT, never from the request body.
+    The app sets RevenueCat's appUserID to the Supabase id (Purchases.logIn), so
+    `user.id` is the correct subscriber to look up — and a client cannot ask us to
+    sync somebody else's purchase.
+    """
+    key = settings.REVENUECAT_API_KEY
+    if not key:
+        # Fail-closed and SAY SO. A silent 200 here would tell the app a purchase
+        # had been applied when nothing was checked.
+        raise HTTPException(503, "Billing is not configured on the server yet.")
+
+    try:
+        r = httpx.get(
+            f"https://api.revenuecat.com/v1/subscribers/{user.id}",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=15,
+        )
+    except httpx.HTTPError as e:
+        logger.warning("[BILLING] sync unreachable for %s: %s", user.id, e)
+        raise HTTPException(502, "Couldn't reach the store. Your purchase is safe — try again in a moment.")
+
+    # 404 = RevenueCat has never seen this subscriber, i.e. nothing was bought.
+    # Not an error, and not a reason to touch the tier (see the grant-only note).
+    if r.status_code == 404:
+        return {"tier": None, "active": False}
+    if r.status_code >= 400:
+        logger.warning("[BILLING] sync %s for %s: %s", r.status_code, user.id, r.text[:200])
+        raise HTTPException(502, "Couldn't confirm your purchase with the store. Try again in a moment.")
+
+    subscriber = (r.json() or {}).get("subscriber") or {}
+    active = _entitlement_active(subscriber, settings.REVENUECAT_PRO_ENTITLEMENT)
+    if not active:
+        return {"tier": None, "active": False}
+
+    _set_tier(user.id, "pro")
+    logger.info("[BILLING] sync → tier=pro for %s", user.id)
+    return {"tier": "pro", "active": True}
