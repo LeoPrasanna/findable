@@ -11,7 +11,10 @@ import { promoSlots, promoCards, readDismissed, PROMO_SNOOZE_MS } from './promoS
  */
 
 const NOW = 1_760_000_000_000;
-const FREE = { saveLimit: 50, aiPerDay: 3, canAsk: false };
+// ⚠️ PRO'S NUMBERS ARE ARGUMENTS NOW, NOT CONSTANTS. The module used to hardcode
+// 500/20 with a comment admitting nothing enforced they matched render.yaml.
+const PRO = { proSaveLimit: 500, proAiLimit: 20 };
+const FREE = { saveLimit: 50, aiPerDay: 3, canAsk: false, ...PRO };
 
 // ── who sees them ────────────────────────────────────────────────────────────
 assert.deepEqual(promoSlots(30, 'free', null, NOW, 3), [8, 18, 28], 'free user, 30 saves');
@@ -57,21 +60,33 @@ assert.ok(cards[1].headline.includes('20') && cards[1].headline.includes('3'), '
 
 // A premise that is not true for this user is omitted, never softened.
 assert.deepEqual(
-  promoCards({ saveLimit: 50, aiPerDay: 3, canAsk: true }).map(c => c.key),
+  promoCards({ saveLimit: 50, aiPerDay: 3, canAsk: true, ...PRO }).map(c => c.key),
   ['saves', 'ai'],
   'a user who still has Ask is not told Ask is Pro-only',
 );
 assert.deepEqual(
-  promoCards({ saveLimit: 500, aiPerDay: 20, canAsk: true }).map(c => c.key),
+  promoCards({ saveLimit: 500, aiPerDay: 20, canAsk: true, ...PRO }).map(c => c.key),
   [],
   'nothing to offer someone already at the Pro numbers',
 );
 // A missing /usage payload must not produce "undefined saves instead of null".
 assert.deepEqual(promoCards({}).map(c => c.key), [], 'no live limits, no claims');
 assert.deepEqual(
-  promoCards({ saveLimit: null, aiPerDay: null }).map(c => c.key),
+  promoCards({ saveLimit: null, aiPerDay: null, ...PRO }).map(c => c.key),
   [],
   'unlimited saves (null) is not something to upsell',
+);
+// ⚠️ AND WITHOUT PRO'S NUMBERS, NO CLAIM IS MADE AT ALL. Falling back to a
+// hardcoded 500 is exactly the false advertisement this signature removed.
+assert.deepEqual(
+  promoCards({ saveLimit: 50, aiPerDay: 3, canAsk: false }).map(c => c.key),
+  ['ask'],
+  'no Pro numbers means no numeric comparison, only the one card that needs none',
+);
+// The card quotes the SERVER's number, whatever it is.
+assert.ok(
+  promoCards({ saveLimit: 50, proSaveLimit: 300 })[0].headline.includes('300'),
+  'quotes what the server granted, not 500',
 );
 
 // ── stored value, which is user-writable in practice ─────────────────────────

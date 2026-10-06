@@ -54,6 +54,40 @@ const EVERY = 10;
  */
 const MAX_PROMOS = 6;
 
+/**
+ * HOW HARD THE TILE SHOUTS. Owner asked for "flashy and animated and moving... may be
+ * bit annoyingly" (2026-10-06).
+ *
+ * ⚠️ IT SHIPS AT 'lively', NOT 'loud', AND THAT IS A DELIBERATE DISAGREEMENT WITH
+ * THE BRIEF. A tile engineered to annoy destroys the only thing this slot is for. The
+ * dismiss rate is the measurement — whether promoted inventory is tolerable in a grid
+ * of the user's own saves — and if the tile is deliberately irritating then the
+ * dismiss rate measures the ANIMATION, not the format. You learn "annoying things
+ * annoy people", which nobody needed an OTA to find out, and you lose the number that
+ * would have told you whether to buy an ad SDK at all.
+ *
+ * It is also the wrong trade against the product: the library is the screen people
+ * open to find something they saved, and a shouting tile in the middle of it trains
+ * them to stop opening it. That costs the saves, the AI actions and the subscription,
+ * to win a few taps on a house ad.
+ *
+ * So: 'lively' is visibly animated — a sheen sweep, a breathing accent edge, a tile
+ * that moves. **Set this to 'loud' and it gets faster, bigger and harder to ignore,
+ * which is one word and one OTA away if the owner still wants it.** Both are honest
+ * positions; this file records which one shipped and why.
+ */
+export type PromoIntensity = 'calm' | 'lively' | 'loud';
+export const PROMO_INTENSITY: PromoIntensity = 'lively';
+
+/** Durations and amplitudes per level. Shorter sweep + bigger pulse = louder. */
+export const PROMO_MOTION: Record<PromoIntensity, {
+  sweepMs: number; restMs: number; pulseMs: number; pulseTo: number; liftTo: number;
+}> = {
+  calm:   { sweepMs: 2600, restMs: 4200, pulseMs: 2800, pulseTo: 0.35, liftTo: 1.000 },
+  lively: { sweepMs: 1500, restMs: 1400, pulseMs: 1600, pulseTo: 0.70, liftTo: 1.015 },
+  loud:   { sweepMs:  850, restMs:  250, pulseMs:  750, pulseTo: 1.00, liftTo: 1.035 },
+};
+
 /** The tile's shape. One of ReelCard's own RATIOS, so it cannot disturb the grid's
  *  rhythm by introducing a fifth proportion nothing else uses. */
 export const PROMO_ASPECT = 4 / 5;
@@ -64,14 +98,14 @@ export const PROMO_ASPECT = 4 / 5;
 export const PROMO_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * What Pro actually gives you. ⚠️ THESE TWO MIRROR `render.yaml`
- * (`PRO_SAVE_LIMIT`, `AI_PRO_DAILY_LIMIT`) AND NOTHING ENFORCES THAT. A promo that
- * promises 500 saves when the server grants 300 is not a stale string, it is a false
- * advertisement inside the product. The FREE numbers are never hardcoded here — they
- * come from the live `/usage` payload, because that is the one the user can check.
+ * ⚠️ NOTHING IS HARDCODED HERE ANY MORE, and the reason is on the record. This file
+ * carried `PRO_SAVES = 500` and `PRO_AI_PER_DAY = 20` with a comment admitting that
+ * nothing enforced they matched `render.yaml` — and a promo promising 500 saves while
+ * the server grants 300 is not a stale string, it is a false advertisement inside the
+ * product. Both halves of every comparison now come from `/usage`
+ * (`pro` and the user's own limits), so a card either states true numbers or is not
+ * shown at all. Same lesson as the "20 saves" promise ProfilePanel used to make.
  */
-const PRO_SAVES = 500;
-const PRO_AI_PER_DAY = 20;
 
 export interface PromoCard {
   /** Stable React key, and the label if this is ever logged. */
@@ -96,20 +130,22 @@ export function promoCards(opts: {
   saveLimit?: number | null;
   aiPerDay?: number | null;
   canAsk?: boolean;
+  proSaveLimit?: number | null;
+  proAiLimit?: number | null;
 }): PromoCard[] {
   const cards: PromoCard[] = [];
 
-  if (opts.saveLimit != null && opts.saveLimit < PRO_SAVES) {
+  if (opts.saveLimit != null && opts.proSaveLimit != null && opts.saveLimit < opts.proSaveLimit) {
     cards.push({
       key: 'saves',
-      headline: `${PRO_SAVES} saves\ninstead of ${opts.saveLimit}`,
-      sub: `Findable Pro — ${PRO_SAVES - opts.saveLimit} more things you never have to delete.`,
+      headline: `${opts.proSaveLimit} saves\ninstead of ${opts.saveLimit}`,
+      sub: `Findable Pro — ${opts.proSaveLimit - opts.saveLimit} more things you never have to delete.`,
     });
   }
-  if (opts.aiPerDay != null && opts.aiPerDay < PRO_AI_PER_DAY) {
+  if (opts.aiPerDay != null && opts.proAiLimit != null && opts.aiPerDay < opts.proAiLimit) {
     cards.push({
       key: 'ai',
-      headline: `${PRO_AI_PER_DAY} AI actions\na day, not ${opts.aiPerDay}`,
+      headline: `${opts.proAiLimit} AI actions\na day, not ${opts.aiPerDay}`,
       sub: 'Summaries, recipes, tasks and workouts — without running out by lunchtime.',
     });
   }

@@ -282,6 +282,71 @@ Owner testing 1.0.12 on 2026-09-25.
   when it became 50/500. Keep them that way.
   The upsell is **tier-aware** in both places (server 403 and client alert):
   free is offered Pro, trial and pro are not, because they already hold 500.
+- [x] **The trial cap is 100, not 500** (owner, 2026-10-06) — `TRIAL_SAVE_LIMIT`,
+  env-overridable, in `render.yaml` for both services. ⚠️ **This REVERSES part of the
+  2026-09-11 decision** that the trial should carry the paid cap. That argument was "a
+  trial that caps at the free number teaches the wrong thing about the product", and
+  it was right about AI limits and wrong about storage: 500-on-trial against
+  50-on-free let someone build a library the free tier could not hold, so the most
+  engaged trial users — the cohort most likely to convert — landed hardest the day it
+  ended. The trial still keeps the PAID AI limit, because that is what paying feels
+  like. 2x leaves a cliff a person can climb down; 10x did not.
+  - **Warned at the free limit, not at the trial limit.** Crossing 50 during a trial
+    now says so once per session and in the library band: *"70 saves — 20 past the
+    free limit of 50."* The cliff was never the bug; being told about it only
+    afterwards was.
+- [x] **The cliff LOCKS, it does not delete** (owner chose option 2, 2026-10-06).
+  `backend/app/library_lock.py`: the newest `save_limit` saves stay open, everything
+  older is read-only — still listed, still visible, still deletable — until the user
+  deletes newer saves or upgrades. **Nothing is ever deleted.** Every lock is
+  reversible by an action the user can take, and raising the cap unlocks the same rows
+  with no migration and no restore.
+  - ⚠️ **DELETE IS THE ONE OPERATION ALLOWED ON A LOCKED SAVE, and it has to be.**
+    Deleting is how someone gets back under the cap; refusing it would make the lock a
+    trap whose only exit is a purchase. `_get_owned_reel_or_404` refuses locked saves
+    **by default** and `delete_reel` opts out explicitly — that direction is the
+    load-bearing part, because an endpoint added later gets the safe behaviour without
+    anyone remembering to ask for it. `test_DELETE_STILL_WORKS_on_a_locked_save`.
+  - ⚠️ **Ask cannot answer out of locked saves.** Otherwise the lock hands back its
+    own withheld content as prose, and charges an AI action to do it. Excluded in the
+    QUERY, not filtered after.
+  - ⚠️ **Locked saves still count toward the cap.** Locking does not free space, so
+    the locked ones are the obvious things to delete. A lock that silently created
+    room would be a second, invisible cap that the save gate disagreed with.
+  - ⚠️ **The flag on a reel is a RENDERING HINT, not the enforcement.** The server
+    403s a locked read regardless; a client that ignored `locked` must still be
+    refused. `TestEnforcement` asserts that directly.
+  - Ties at the boundary stay OPEN (strictly-older comparison), so a double-save in
+    the same second can leave a library one or two over its cap. That is the direction
+    an error has to go.
+  - The tile keeps its picture under a scrim and a LOCKED badge rather than going
+    blank — the point of locking instead of deleting is that the save is still there,
+    and a blanked tile looks exactly like the deletion we chose not to do. Tapping it
+    explains itself and offers the free exit first; a tile that silently ignores a tap
+    is indistinguishable from a broken one.
+  - 13 tests in `backend/tests/test_library_lock.py`; **369 backend tests pass.**
+- [x] 👤 **DECIDED: the trial-end cliff locks rather than deletes** (owner,
+  2026-10-06). Kept for the record because the rejected option was irreversible:
+  The owner drafted warning copy promising *"once the trial overs you will lose older
+  saves, only latest saves will be there"* (2026-10-06). **That behaviour does not
+  exist and was deliberately not built** — it is irreversible destruction of content a
+  user chose to keep, and the shipped warning says the opposite ("Nothing is deleted
+  when your trial ends"), which is what the code actually does. A test asserts the
+  copy cannot drift into threatening deletion. Three options, and this needs an
+  explicit owner answer because two of them are one-way doors:
+  1. **Keep today's behaviour** — nothing is deleted, new saves pause until they are
+    back under the cap or go Pro. Free, shipped, honest. ⭐ Recommended.
+  2. **Lock, do not delete** — saves past the cap stay in the library but greyed and
+    unopenable, restored instantly by Pro or by deleting newer ones. Keeps the
+    loss-aversion pressure without destroying anything, and it is what Dropbox and
+    Evernote do. Costs real work: the list query, the detail screen, and Ask all need
+    to know what is locked.
+  3. **Delete the excess.** NOT CHOSEN. Strongest pressure, and the only one that
+    cannot be undone. ⚠️ It destroys user content for non-payment, it will produce
+    one-star reviews from people who did not read a notification, and it would need a
+    genuine grace period plus an export before it could be defensible at all. The
+    owner's drafted warning copy described this behaviour; it was never built, and the
+    shipped copy says "nothing has been deleted", which is true.
 - [x] **The trial→free cliff said the wrong thing, and it said it at the till**
   (owner spotted it, 2026-10-06: *"if he/she save more than 50 and after end of trial
   period, then logic fails right?"*). **The gate itself was always right** — the cap
@@ -657,9 +722,33 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
     times and reads as a rendering bug. **Delete the cap the day real creatives
     arrive** — a network supplies a different one every time, and the cap would then be
     throwing away revenue.
-  - ⚠️ **`PRO_SAVES` and `PRO_AI_PER_DAY` in `promoSlot.ts` mirror `render.yaml` and
-    nothing enforces that.** A promo promising 500 saves while the server grants 300 is
-    not a stale string, it is a false advertisement inside the product.
+  - [x] **Both Pro numbers now come from the server** (`/usage` -> `pro`), so the
+    promo cannot advertise a cap the server does not grant. The hardcoded
+    `PRO_SAVES = 500` is gone.
+  - [x] **It animates** (owner, 2026-10-06: "make it more flashy and animates and
+    moving... may be bit annoyingly"). A diagonal sheen sweeps the tile, the accent
+    edge breathes, and the whole tile lifts very slightly — both loops on the NATIVE
+    driver (transform and opacity only), because up to 6 are mounted at once and six
+    JS-driven loops would be a measurable scroll stutter.
+    - ⚠️ **IT SHIPS AT `'lively'`, NOT `'loud'`, AND THAT IS A DELIBERATE DISAGREEMENT
+      WITH THE BRIEF.** A tile engineered to annoy destroys the only thing this slot is
+      for: the dismiss rate is supposed to measure whether promoted inventory is
+      tolerable in a grid of your own saves, and if the tile is deliberately irritating
+      then it measures the ANIMATION instead. The finding becomes "annoying things
+      annoy people", which needed no OTA, and the number that would have told us
+      whether to buy an ad SDK is gone. It is also the wrong trade against retention:
+      the library is the screen people open to find something, and a shouting tile in
+      the middle of it trains them to stop opening it — costing the saves, the AI
+      actions and the subscription to win a few taps on a house ad.
+    - **`PROMO_INTENSITY` in `promoSlot.ts` is the dial:** `'calm' | 'lively' | 'loud'`.
+      Setting it to `'loud'` is one word and one OTA, and makes it faster, bigger and
+      harder to ignore. The owner's call; this records which shipped and why.
+    - ⚠️ **REDUCE MOTION IS HONOURED AND IS NOT NEGOTIABLE WITH THE BRIEF.** A
+      sweeping, pulsing tile is exactly what triggers nausea and migraine for people
+      with vestibular disorders, and both platforms expose the setting so apps can
+      stop. Someone who asked their OS for less motion gets the same copy and the same
+      offer with no movement at all. Attention-grabbing is a preference; this is an
+      accessibility floor.
   - ⚠️ **THE DISMISS RATE IS THE MEASUREMENT, not a convenience.** A real AdMob unit is
     not dismissible; shipping the first one undismissable would have guaranteed a false
     positive about tolerance. The signal that would kill the whole idea is free users
@@ -732,6 +821,32 @@ if dropped, delete `docs/DESIGN_PROPOSAL.md` too.
 - **Capsule tab bar + centre FAB restyle.** Closed 2026-08-10. The instruction assumed an
   `app/(tabs)/` directory that has never existed; Home and Library **share the route `/`**
   and are told apart by a session flag, which expo-router's `Tabs` cannot express.
+- **One account per phone / device-locked trials.** Asked 2026-10-06 ("same mobile with
+  multiple gmail or apple ids can have multiple accounts, can't we restrict them to one
+  phone to one account?"). **No — the mechanism is against App Store rules and does not
+  work anyway.**
+  - ⚠️ **Apple forbids the technique.** Guideline 5.1.1(iv): an app may not use
+    device fingerprinting to identify a device or user. There is no durable device id
+    to use legitimately — `identifierForVendor` resets once all of a vendor's apps are
+    uninstalled, and the IDFA needs ATT consent and can be reset or zeroed at will.
+  - **Android is no better**: `ANDROID_ID` is per signing-key AND per device AND per
+    user profile, and a factory reset changes it. Play policy also limits tying
+    persistent identifiers to personal data.
+  - **It punishes the honest.** Shared family phones, a partner signing in, a work and
+    a personal account, a second-hand handset — all broken, to inconvenience an
+    attacker who only needs a second phone or an emulator.
+  - **The loss is already bounded, which is the real answer.** A farmed trial is worth
+    at most `TRIAL_DAYS × AI_DAILY_LIMIT × ~$0.004` ≈ **$0.40**, and
+    `normalize_email()` already defeats the cheap version of the attack: it strips
+    `+tags` for every provider and dots in Gmail local parts, and `TrialGrantDB`
+    survives account deletion, so a genuinely fresh trial costs a genuinely fresh
+    phone-verified Google account.
+  - **And the store will enforce it for free when billing lands.** Apple's
+    introductory-offer eligibility is per Apple ID and Family Sharing group, Google
+    Play's equivalent is per Google account — both enforced at the store, neither
+    bypassable by making Gmail accounts. If trial abuse ever shows up in the data, the
+    fix is to move the trial onto a store intro offer, not to fingerprint phones.
+
 - **DDoS self-testing and a formal pentest.** ToS violation and revenue-stage respectively.
 
 ### Closed during the 2026-09-07 condense

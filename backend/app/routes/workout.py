@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 
 from app.database import get_db, ReelDB, WorkoutExerciseDB, TaskDB
+from app import library_lock
 from app.routes.models.workout import (
     WorkoutPlanResponse, WorkoutExerciseResponse,
     UpdateExerciseRequest, TaskResponse, TaskListResponse,
@@ -50,6 +51,20 @@ def _get_reel_or_404(reel_id: str, user: AuthUser, db: Session) -> ReelDB:
     reel = db.query(ReelDB).filter(ReelDB.id == reel_id, ReelDB.user_id == user.id).first()
     if not reel:
         raise HTTPException(status_code=404, detail="Reel not found")
+    # ⚠️ A LOCKED SAVE IS READ-ONLY, AND AN AI ACTION IS NOT A READ. Everything in
+    # this module either generates from the reel or charges the AI budget, so there is
+    # no caller here that should be allowed through — unlike reels.py, where DELETE
+    # has to be. Mirrors _get_owned_reel_or_404 there; see app/library_lock.py.
+    if library_lock.is_locked(reel, library_lock.cutoff_for(user, db)):
+        ent = entitlements_for(user, db)
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"This save is locked. Your library holds more than the {ent.save_limit} "
+                f"your plan keeps open, so the oldest are read-only — nothing has been "
+                f"deleted. Delete some newer saves to unlock it, or go Pro."
+            ),
+        )
     return reel
 
 

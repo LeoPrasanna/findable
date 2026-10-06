@@ -83,8 +83,11 @@ class TestEffectiveTier:
         try:
             ent = entitlements_for(AuthUser(id="u-new", email="a@b.co"), db)
             assert ent.tier == "trial"
-            # The trial shows what paying feels like, so it gets the PRO cap.
-            assert ent.save_limit == settings.PRO_SAVE_LIMIT
+            # ⚠️ ITS OWN CAP, NOT PRO'S (owner, 2026-10-06). The trial keeps the PAID
+            # AI limit — that is what paying feels like — but not the paid STORAGE
+            # limit, because a 500-save trial against a 50-save free tier lets someone
+            # build a library the free tier cannot hold.
+            assert ent.save_limit == settings.TRIAL_SAVE_LIMIT
             assert ent.ai_daily_limit == settings.AI_DAILY_LIMIT
             assert ent.trial_ends_at is not None
         finally:
@@ -193,17 +196,20 @@ class TestSaveCap:
     tests shrink the limits rather than seeding hundreds of rows — the mechanism
     is what is under test, and the numbers are asserted once, below."""
 
-    def test_the_caps_are_fifty_free_and_five_hundred_paid(self, env):
+    def test_the_caps_are_fifty_free_one_hundred_trial_five_hundred_paid(self, env):
         _, Session = env
         assert settings.FREE_SAVE_LIMIT == 50
+        assert settings.TRIAL_SAVE_LIMIT == 100
         assert settings.PRO_SAVE_LIMIT == 500
         db = Session()
         try:
             trial = entitlements_for(AuthUser(id="u-t1", email="t1@b.co"), db)
             pro = entitlements_for(
                 AuthUser(id="u-p1", email="p1@b.co", claims={"app_metadata": {"tier": "pro"}}), db)
-            # The trial shows what paying feels like — it gets the PAID cap.
-            assert trial.save_limit == 500
+            # ⚠️ 100, NOT 500. A 10x drop from trial to free meant the most engaged
+            # trial users — the cohort most likely to convert — landed hardest the day
+            # it ended. 2x leaves a cliff a person can climb down.
+            assert trial.save_limit == 100
             assert pro.save_limit == 500
             # No tier may be uncapped: an unlimited promise cannot be priced.
             assert trial.save_limit is not None and pro.save_limit is not None
@@ -267,6 +273,18 @@ class TestSaveCap:
         body = c.get("/api/account/usage").json()
         assert body["after_trial"] == {"save_limit": 37, "ai_limit": 4}
 
+    def test_usage_states_what_pro_holds(self, env, monkeypatch):
+        """promoSlot.ts hardcoded PRO_SAVES = 500 with a comment admitting nothing
+        enforced that it matched render.yaml. A promo promising 500 saves while the
+        server grants 300 is a false advertisement inside the product, so the number
+        comes from here."""
+        client, Session = env
+        monkeypatch.setattr(settings, "PRO_SAVE_LIMIT", 321)
+        monkeypatch.setattr(settings, "AI_PRO_DAILY_LIMIT", 9)
+        c = client(AuthUser(id="u-pro-nums", email="pn@b.co"))
+        body = c.get("/api/account/usage").json()
+        assert body["pro"] == {"save_limit": 321, "ai_limit": 9}
+
     def test_deleting_below_cap_reopens_saving(self, env, monkeypatch):
         client, Session = env
         monkeypatch.setattr(settings, "FREE_SAVE_LIMIT", 20)
@@ -290,6 +308,9 @@ class TestSaveCap:
         more — that is the change, so the test asserts the opposite on purpose."""
         client, Session = env
         monkeypatch.setattr(settings, "PRO_SAVE_LIMIT", 20)
+        # The trial has its own cap now, so patching PRO alone would leave the trial
+        # user at 100 and the assertion below would pass for the wrong reason.
+        monkeypatch.setattr(settings, "TRIAL_SAVE_LIMIT", 20)
         from app.routes import reels as reels_module
         monkeypatch.setattr(reels_module, "SessionLocal", Session)
         monkeypatch.setattr(reels_module.extractor, "extract_info",
@@ -402,7 +423,7 @@ class TestUsageEndpoint:
         body = client(AuthUser(id="u-shape", email="s@b.co")).get("/api/account/usage").json()
         assert body["tier"] == "trial"
         assert body["trial_ends_at"] is not None
-        assert body["saves"] == {"used": 0, "limit": settings.PRO_SAVE_LIMIT}
+        assert body["saves"] == {"used": 0, "limit": settings.TRIAL_SAVE_LIMIT}
         assert body["limit"] == 10 and body["remaining"] == 10
 
     def test_expired_shape(self, env):

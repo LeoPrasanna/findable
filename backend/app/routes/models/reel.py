@@ -56,6 +56,12 @@ class ReelResponse(BaseModel):
     # True when the summarizer flagged the content as medical/high-stakes advice —
     # the app shows a disclaimer and hides the tasks/workout actions.
     is_sensitive: bool = False
+    # ⚠️ A RENDERING HINT, NOT THE ENFORCEMENT. True when this save sits outside the
+    # newest `save_limit` because the library is over its tier's cap: still visible,
+    # still deletable, not readable. The 403 from the routes is what actually stops a
+    # read — a client that ignored this flag must still be refused. See
+    # app/library_lock.py, and note that NOTHING IS EVER DELETED.
+    locked: bool = False
     created_at: datetime
 
     class Config:

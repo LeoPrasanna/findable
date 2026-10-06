@@ -121,6 +121,17 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
             "save_limit": settings.FREE_SAVE_LIMIT,
             "ai_limit": settings.AI_FREE_DAILY_LIMIT,
         },
+        # What Pro holds, for the upsell copy.
+        #
+        # ⚠️ SENT SO THE CLIENT STOPS HARDCODING IT. `services/promoSlot.ts` carried
+        # PRO_SAVES = 500 with a comment admitting nothing enforced that it matched
+        # render.yaml — and a promo promising 500 saves while the server grants 300 is
+        # not a stale string, it is a false advertisement inside the product. Same
+        # reasoning as `after_trial`, which existed because the client guessed "20".
+        "pro": {
+            "save_limit": settings.PRO_SAVE_LIMIT,
+            "ai_limit": settings.AI_PRO_DAILY_LIMIT,
+        },
         # Whole-library distinct counts for the profile stat cards (authoritative,
         # unfiltered — not derived from whatever page the client happens to hold).
         "categories": categories,

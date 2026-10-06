@@ -12,10 +12,17 @@ Three effective tiers:
          trickle, not zero — a dead app uninstalls, a limited app upsells).
          Saves still get a full automatic summary — see FREE_AUTO_SUMMARY.
 
-⚠️ EVERY TIER IS CAPPED (owner, 2026-09-11): 50 free, 500 on trial and pro. It
-used to be 20 on free and UNLIMITED above, so the paid tier's storage promise
-was "no limit" — a promise with no ceiling is one you cannot price and cannot
-budget for. Saves remain a real upgrade lever; a 10x difference is the lever.
+⚠️ EVERY TIER IS CAPPED (owner, 2026-09-11): 50 free, 500 pro. It used to be 20
+on free and UNLIMITED above, so the paid tier's storage promise was "no limit" — a
+promise with no ceiling is one you cannot price and cannot budget for. Saves remain
+a real upgrade lever; a 10x difference is the lever.
+
+⚠️ THE TRIAL GOT ITS OWN CAP OF 100 (owner, 2026-10-06), which REVERSES part of
+the above. The trial keeps the paid AI limit — that is what paying feels like — but
+not the paid STORAGE limit, because 500-on-trial against 50-on-free let someone
+build a library the free tier could not hold. The most engaged trial users then
+landed hardest on the day it ended, which is precisely the cohort most likely to
+have paid. `TRIAL_SAVE_LIMIT` in config.py carries the full reasoning.
 `save_limit` stays `int | None` because the enforcement points already branch on
 None and an unlimited tier may come back; nothing sets None today.
 
@@ -121,7 +128,7 @@ class Entitlements:
     tier: str                       # 'pro' | 'trial' | 'free' (effective)
     ai_daily_limit: int
     # None = unlimited; gates NEW saves only. FREE_SAVE_LIMIT on free,
-    # PRO_SAVE_LIMIT on trial and pro — see the module docstring.
+    # TRIAL_SAVE_LIMIT on trial, PRO_SAVE_LIMIT on pro — see the module docstring.
     save_limit: int | None
     trial_ends_at: datetime | None  # UTC; None for pro
     # Feature gating (revised 2026-07-28): post-trial free keeps saves/library/
@@ -165,8 +172,12 @@ def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None
         return Entitlements(
             tier="trial",
             ai_daily_limit=settings.AI_DAILY_LIMIT,
-            # The trial shows what paying feels like — so it gets the PRO cap.
-            save_limit=settings.PRO_SAVE_LIMIT,
+            # ⚠️ NOT THE PRO CAP ANY MORE (owner, 2026-10-06). The trial keeps the
+            # PAID AI limit, because that is what paying feels like — but its own
+            # storage cap, because a 500-save trial against a 50-save free tier lets
+            # someone build a library the free tier cannot hold. See the note on
+            # TRIAL_SAVE_LIMIT in config.py.
+            save_limit=settings.TRIAL_SAVE_LIMIT,
             trial_ends_at=trial_ends,
         )
 

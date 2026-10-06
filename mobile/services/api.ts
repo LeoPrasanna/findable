@@ -43,6 +43,18 @@ export function thumbCandidates(url?: string | null): string[] {
 
 export interface Reel {
   id: string;
+  /**
+   * This save sits outside the newest `save_limit`, because the library is over its
+   * tier's cap. Read-only: still listed, still deletable, not openable.
+   *
+   * ⚠️ A RENDERING HINT, NOT THE RULE. The server refuses a locked read with a 403
+   * regardless of what this says — see backend/app/library_lock.py. Treating it as
+   * the enforcement is how a client-side "lock" becomes a suggestion.
+   *
+   * ⚠️ NOTHING IS EVER DELETED. Owner decision 2026-10-06, choosing lock over
+   * deleting the excess at the end of a trial. Copy must never imply otherwise.
+   */
+  locked?: boolean;
   url: string;
   platform: string;
   title: string | null;
@@ -186,6 +198,9 @@ export interface Usage {
    *  2026-09-11 and was a wrong promise shown to every trial user until 2026-10-06.
    *  Both numbers are env-overridable, so the client cannot safely guess either. */
   after_trial?: { save_limit: number; ai_limit: number };
+  /** What Pro holds. ⚠️ SERVER-SENT so the upsell copy cannot promise a number the
+   *  server does not grant — promoSlot.ts used to hardcode 500. */
+  pro?: { save_limit: number; ai_limit: number };
   categories?: number; // distinct categories across the whole library
   platforms?: number;  // distinct platforms across the whole library
   used: number;        // AI actions spent today

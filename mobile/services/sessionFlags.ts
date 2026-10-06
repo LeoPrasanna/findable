@@ -45,6 +45,23 @@ export function claimSaveCeilingWarning(): boolean {
   return true;
 }
 
+/**
+ * The trial-overflow warning, once per session.
+ *
+ * ⚠️ A SEPARATE FLAG FROM THE CEILING WARNING ON PURPOSE. They fire at different
+ * numbers for different reasons: the ceiling one means "you are about to be refused",
+ * this one means "you are fine today and will not be in a week". Sharing one flag
+ * would silence whichever happened to lose the race.
+ */
+let warnedTrialOverflow = false;
+
+/** One-shot per session: true the first time only. */
+export function claimTrialOverflowWarning(): boolean {
+  if (warnedTrialOverflow) return false;
+  warnedTrialOverflow = true;
+  return true;
+}
+
 export function markReopenPanel(): void {
   reopenPanel = true;
 }
