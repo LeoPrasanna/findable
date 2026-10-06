@@ -79,6 +79,14 @@ cap, `_MAX_TOKENS = 400`, Haiku at $1/$5 per MTok): **~$0.0026 typical,
 *(eCPM ranges from published 2026 benchmarks, which skew gaming; non-gaming runs
 20–30% lower. Estimated, not measured for our app.)*
 
+**The strongest argument FOR ads, which the rest of this file under-sells: ads are
+paid by the ~98% who will never subscribe.** A 2% conversion at 1,000 MAU is 20
+subscribers; the other 980 people cost tokens and bandwidth and return nothing. In-feed
+ads are the only mechanism in the product that earns anything from them, and at
+India-weighted eCPM they earn **about the same per month as Pro does at 2%** (see the
+scenario table below). They are not a rounding error next to the subscription — they are
+the same order of magnitude, from a completely different population, and they stack.
+
 **But unit economics are the wrong lens at our scale.** AdMob pays out at a
 **$100 threshold**. At 1,000 MAU with 20% watching one rewarded ad a week, that
 is ~800 impressions/month ≈ **$8/month** — over a year to get paid once. The
@@ -176,10 +184,64 @@ measured** (our own eCPM is unknown until we serve):
 So in-feed **can** clear AdMob's $100 payout threshold inside a month in tier-1 geos,
 which rewarded could not. The India-weighted row is the one to plan against.
 
-⚠️ **Set against what the free tier costs:** 800 free users at 3 AI actions/day is
-~$290/month in Haiku tokens. India-weighted ad revenue covers roughly **a tenth** of
-that. Ads do not fund the free tier at our likely geo; the 50-save cap → Pro does.
-Ads are a top-up, and they should be argued for as one.
+## Set against what a free user actually costs — PER USER, not in aggregate
+
+⚠️ **An earlier version of this section said ads cover "roughly a tenth" of the free
+tier's AI cost. That compared ad revenue against the CEILING — every free user doing
+all 3 AI actions every single day — which no cohort does.** Per user per month, with
+`AI_FREE_DAILY_LIMIT=3` and ~$0.004 an action:
+
+| Free user's AI usage | Token cost | Ad revenue, India | Ad revenue, tier-1 |
+|---|---|---|---|
+| Ceiling: 3/day, every day (90) | $0.36 | $0.02–0.05 | $0.13–0.26 |
+| Moderate: 3/day, 10 days (30) | $0.12 | $0.02–0.05 | $0.13–0.26 |
+| Light: ~10 actions | $0.04 | $0.02–0.05 | $0.13–0.26 |
+
+**So ads roughly pay for a LIGHT free user and cannot pay for a HEAVY one** — and in
+tier-1 geos a light-to-moderate free user is ad-profitable outright. That is a better
+answer than "a tenth" and it has a design consequence worth keeping:
+
+> ⚠️ **The 3/day cap is what makes ads viable at all.** Ad revenue per user is flat —
+> it scales with screens viewed, not with AI spend — while AI cost scales with the cap.
+> Raising the free AI cap breaks the ad economics silently, because the revenue side
+> does not move. If the free cap is ever raised, re-do this table first.
+
+Ads remain a **top-up next to Pro, not a replacement for it** — but the reason is no
+longer that they earn a tenth. It is that they are flat per user while a subscription
+is not, so they can fund a free tier and cannot fund growth.
+
+## Two scenarios at 1,000 MAU — the comparison that keeps being asked for
+
+Assumes 80% free / 20% trial-or-pro, 2% paid conversion, Apple's 15% Small Business
+rate, and the in-feed impression estimate above. ⚠️ **Every figure is estimated.**
+
+**Scenario A — ads only, no purchase flow (where we are today if nothing changes):**
+
+| | India-weighted | Tier-1-weighted |
+|---|---|---|
+| Ad revenue, 800 free users | $17–44/mo | $110–230/mo |
+| AI cost of those users (moderate) | ~$96/mo | ~$96/mo |
+| **Net** | **−$52 to −$79** | **+$14 to +$134** |
+
+Free users who hit the 50-save wall have nowhere to go, so the ceiling on this scenario
+is "ads subsidise a free product", never "the product earns".
+
+**Scenario B — Pro only, no ads (what the code is built for today):**
+
+| | India (₹99 → ~$0.96 net) | US ($7 → $5.95 net) |
+|---|---|---|
+| 20 subscribers | $19/mo | $119/mo |
+| AI cost of 20 pro users (moderate, 20/day cap) | ~$5/mo | ~$5/mo |
+| AI cost of the 800 free users | ~$96/mo | ~$96/mo |
+| **Net** | **−$82** | **+$18** |
+
+⚠️ **Read the two tables together, because that is the finding:** at this scale and at
+INR pricing, *neither one alone is profitable* — and they are worth roughly the same
+amount. **A + B together** is ~$36–63/mo India and ~$230–350/mo tier-1 against the same
+~$101 of tokens, which is the first combination that clears its own cost in INR.
+
+The decision is therefore not "ads or subscription". It is "both, in the order the
+platforms allow" — and the platforms allow the subscription first.
 
 ## The objection that is not about money
 

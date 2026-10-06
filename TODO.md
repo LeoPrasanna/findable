@@ -347,11 +347,19 @@ Owner testing 1.0.12 on 2026-09-25.
     merge, the Play data-safety disclosure, the EEA/UK **certified CMP**, or the privacy-
     policy processor row — and non-personalized inventory clears 30–50% below
     personalized, so it moves the revenue DOWN.
-  - ⚠️ **It does not fund the free tier.** In-feed is high-volume where rewarded was
-    high-value, so it clears the $100 payout threshold far sooner — but India-weighted
-    that is ~$15–40/month at 1,000 MAU against ~$290/month of Haiku tokens for the same
-    free users. Roughly a tenth. Argue for it as a top-up; the 50-save cap → Pro is the
-    lever that actually pays.
+  - **It earns about as much as Pro does, from the people Pro never reaches.** In-feed
+    is high-volume where rewarded was high-value, so it clears the $100 payout threshold
+    far sooner. At 1,000 MAU, India-weighted: **ads ~$17–44/mo vs Pro at 2% ~$19/mo** —
+    same order of magnitude, completely different population (the ~98% who never
+    subscribe), and they stack. ⚠️ **Neither alone is profitable in INR at that scale;
+    together they are.** Full arithmetic and both scenarios in `docs/ADS_RESEARCH.md`.
+    ⚠️ An earlier version of this item said ads cover "a tenth" of the free tier's AI
+    cost — that compared against the CEILING (every free user maxing 3/day every day),
+    which no cohort does. Corrected 2026-10-06.
+  - ⚠️ **The 3/day free AI cap is what makes ads viable.** Ad revenue per user is FLAT —
+    it scales with screens viewed, not with AI spend — while AI cost scales with the cap.
+    Raising the free cap breaks the ad economics silently, because the revenue side does
+    not move. Re-do the table in `docs/ADS_RESEARCH.md` before ever raising it.
   - **The buildable half, now, free, and OTA:** ship the SLOT with our own Pro upsell in
     it. `app/index.tsx` distributes tiles shortest-column-first, so injection is small.
     It measures the two things that decide everything — whether a non-organic tile in
