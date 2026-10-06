@@ -1,6 +1,7 @@
 {
   "platforms": ["ios"],
   "ios": {
-    "modules": ["ShareConfigModule"]
+    "modules": ["ShareConfigModule"],
+    "appDelegateSubscribers": ["ShareResultSubscriber"]
   }
 }

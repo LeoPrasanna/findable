@@ -166,6 +166,15 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
       return false
     }
 
+    // ⚠️ THE LINK HAS TO OUTLIVE THIS PROCESS TOO. The result notification is
+    // posted by ShareResultSubscriber.swift in the CONTAINING APP, which is woken
+    // when this upload finishes — and by then the request body is a temp file the
+    // system has consumed, so there is nothing left to read the URL from. Without
+    // this, a result could not name the platform ("Couldn't save that Instagram
+    // link"), which is the wording rule in services/shareNotice.ts.
+    // Keyed by the session id iOS hands the app, and deleted when it is read.
+    defaults.set(link, forKey: "findableShareLink." + sessionId)
+
     session.uploadTask(with: request, fromFile: tmp).resume()
 
     // Clear the stashed payload the app would otherwise pick up and save a
@@ -204,10 +213,13 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
   /// ⚠️ THE WORDING CLAIMS ONLY WHAT WE KNOW. The upload is a BACKGROUND
   /// session handed to the system; it completes long after this process is
   /// dead, and iOS delivers that completion to the containing app, not here. So
-  /// this says "saving", never "saved". Android can say "Saved from X" because
-  /// its foreground service is still alive to see the HTTP status; this cannot,
-  /// and inventing a confirmation we have not got is exactly the kind of lie
-  /// that makes a lost save undiscoverable.
+  /// this says "saving", never "saved" — inventing a confirmation we have not got
+  /// is exactly the kind of lie that makes a lost save undiscoverable.
+  ///
+  /// ⚠️ THE RESULT NOW ARRIVES SEPARATELY, so do not "fix" this string to say
+  /// saved. modules/share-config/ios/ShareResultSubscriber.swift is woken by iOS
+  /// when the upload finishes and posts the outcome as a SECOND notification, the
+  /// same shape Android's service posts. This one stays the pop.
   ///
   /// ⚠️ \`completeRequest\` IS DEFERRED UNTIL THE NOTIFICATION IS HANDED OVER.
   /// It tears the process down, and \`UNUserNotificationCenter\` is asynchronous —
@@ -221,12 +233,12 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
     // fires while the user is still looking at Instagram, and "did that go to
     // Findable?" is the only question it has to answer.
     //
-    // ⚠️ THE BODY IS DIFFERENT FROM ANDROID'S ON PURPOSE. On Android this pop is
-    // replaced seconds later by a result notification that names the reel or the
-    // reason it failed. iOS cannot: the upload is a background session the
-    // system completes after this process is dead, and it hands that completion
-    // to the CONTAINING APP, not to us. So this is the only thing the user will
-    // see, and it must not imply a confirmation we never got.
+    // ⚠️ THE BODY IS DIFFERENT FROM ANDROID'S ON PURPOSE. Android replaces this
+    // pop in place seconds later; on iOS the result is a separate notification
+    // posted by the containing app when the system wakes it
+    // (ShareResultSubscriber.swift), which can be much later — after a
+    // force-quit, not until the app is opened again. So this line must stand on
+    // its own and must not imply a confirmation we have not got yet.
     let title = findablePlatformLabel(link) + " → Findable"
     let body = "Saving this one in the background — it'll be in your library shortly."
 
