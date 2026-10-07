@@ -15,6 +15,7 @@ import { Avatar } from '../components/Avatar';
 import { useAuth } from '../contexts/AuthContext';
 import { emitUi, useDismissOnBackground } from '../services/uiBus';
 import { Label, EmptyState } from '../components/kit';
+import { EmptySlate } from '../components/EmptySlate';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
 import { syncReminders, askReminderPermission } from '../services/reminders';
@@ -650,9 +651,16 @@ export default function TodosScreen() {
 
         {todos.length === 0 && !error ? (
           /* Was a raw <Text> at weight 800 — see the note on EmptyState. The
-             icon goes with it: no other empty state in the app has one, and it
-             was the only thing making this screen's version look bespoke. */
+             static icon that used to sit here went with it: it was the one thing
+             making this screen's version look bespoke.
+             ⚠️ The owner asked for movement here instead (2026-10-07), which
+             reverses that call knowingly. `EmptySlate` is the compromise: it is
+             drawn only from hairlines, the same `Rule` language the rest of the app
+             is built from, so it reads as this system rather than as an
+             illustration dropped into it. The BODY TEXT STAYS — it is the only
+             place that teaches “Add to your slate”, and no animation can say that. */
           <EmptyState
+            art={<EmptySlate />}
             kicker="All clear"
             title="Nothing to follow through on"
             body={`Add something you want to get done — or open a save and tap “${TODO_ADD_LABEL}” to turn it into a real plan.`}
