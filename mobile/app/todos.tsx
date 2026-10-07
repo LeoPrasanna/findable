@@ -14,7 +14,7 @@ import { TodoGoalBar } from '../components/TodoGoalBar';
 import { Avatar } from '../components/Avatar';
 import { useAuth } from '../contexts/AuthContext';
 import { emitUi, useDismissOnBackground } from '../services/uiBus';
-import { Label, EmptyState } from '../components/kit';
+import { Label } from '../components/kit';
 import { EmptySlate } from '../components/EmptySlate';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
@@ -22,7 +22,7 @@ import { syncReminders, askReminderPermission } from '../services/reminders';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
 import { mergeTodoList } from '../services/todoMerge';
 import { useTodoSettings } from '../services/todoSettings';
-import { TODO_QUOTES, TODO_ROLL_NAMES, TODO_ADD_LABEL } from '../constants/todoBrand';
+import { TODO_QUOTES, TODO_ROLL_NAMES } from '../constants/todoBrand';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, tracking, typeface, gradients, shadow, themed } from '../constants/theme';
 
@@ -650,21 +650,17 @@ export default function TodosScreen() {
         )}
 
         {todos.length === 0 && !error ? (
-          /* Was a raw <Text> at weight 800 — see the note on EmptyState. The
-             static icon that used to sit here went with it: it was the one thing
-             making this screen's version look bespoke.
-             ⚠️ The owner asked for movement here instead (2026-10-07), which
-             reverses that call knowingly. `EmptySlate` is the compromise: it is
-             drawn only from hairlines, the same `Rule` language the rest of the app
-             is built from, so it reads as this system rather than as an
-             illustration dropped into it. The BODY TEXT STAYS — it is the only
-             place that teaches “Add to your slate”, and no animation can say that. */
-          <EmptyState
-            art={<EmptySlate />}
-            kicker="All clear"
-            title="Nothing to follow through on"
-            body={`Add something you want to get done — or open a save and tap “${TODO_ADD_LABEL}” to turn it into a real plan.`}
-          />
+          /* ⚠️ NO WORDS HERE, AND THAT IS THE OWNER'S CALL (2026-10-07), MADE TWICE.
+             This was "All clear / Nothing to follow through on" plus a paragraph
+             teaching "Add to your slate"; the first attempt kept all three and put
+             the drawing above them, which is not what "instead of that text" meant.
+             All of it is gone. What is lost is the only prompt for the SECOND way
+             to add a todo (open a save → "Add to your slate"); the "+ New task"
+             button below still teaches the first. The stat row above already says
+             0 OPEN · n DONE, so the state itself is not unsaid — it is just said in
+             numbers rather than a sentence.
+             `EmptySlate` carries the screen-reader label the deleted text used to. */
+          <EmptySlate />
         ) : (
           grouped.map((section, i) => (
             <MotiView
