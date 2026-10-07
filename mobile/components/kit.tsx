@@ -202,15 +202,25 @@ export function Screen({ children, pad = false, scroll = false, style }: {
  * `children` is the slot for whatever comes after the copy — usually one
  * GhostButton, occasionally more.
  */
-export function EmptyState({ kicker, title, body, children, style }: {
+export function EmptyState({ kicker, title, body, art, children, style }: {
   kicker: string;
   title: ReactNode;
   body?: ReactNode;
+  /**
+   * Optional drawing above the kicker.
+   *
+   * ⚠️ OPT-IN, AND IT HAS TO STAY THAT WAY. Seven screens render this component and
+   * one of them is "Can't reach the server" — a decorative flourish on an error
+   * state would be absurd, so nothing is added here by default. Pass `art` only
+   * where the empty state is genuinely a GOOD outcome.
+   */
+  art?: ReactNode;
   children?: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View style={[styles.emptyState, style]}>
+      {art}
       <Label wide>{kicker}</Label>
       {/* numberOfLines 3 because one caller echoes the user's own query back,
           and an unbounded string there can push the body off-screen. */}
