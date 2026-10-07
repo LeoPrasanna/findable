@@ -15,6 +15,35 @@
 export type PlanId = 'weekly' | 'monthly';
 
 /**
+ * Run tasks strictly one after another, in the order they were handed over.
+ *
+ * ⚠️ THIS EXISTS TO STOP TWO ACCOUNTS SHARING ONE SUBSCRIPTION. RevenueCat's rule
+ * for switching users is `logOut()`, **wait for it**, then `logIn(newId)` — swapping
+ * directly with a second `logIn` ALIASES the two app user ids together, which on a
+ * shared device would attach one account's purchase to the other's.
+ *
+ * Supabase delivers SIGNED_OUT and SIGNED_IN as two separate events, and the auth
+ * gate must not block on a billing SDK, so both call sites are deliberately
+ * fire-and-forget. Without a queue their promises interleave and the order RevenueCat
+ * sees is whichever network call returns first. The queue makes the ORDERING a
+ * property of this module instead of a property of how fast two requests happen to
+ * resolve.
+ *
+ * A rejected task must not stall the queue behind it, so failures are absorbed here
+ * and still delivered to the caller's own promise.
+ */
+export function serialQueue() {
+  let tail: Promise<unknown> = Promise.resolve();
+  return function run<T>(task: () => Promise<T>): Promise<T> {
+    // `.then(task, task)` runs the next task whether the previous one kept or broke
+    // its promise — a failed logOut must never wedge every later logIn.
+    const next = tail.then(task, task);
+    tail = next.catch(() => {});
+    return next;
+  };
+}
+
+/**
  * Enough of RevenueCat's `PurchasesPackage` to choose and describe one. Declared
  * structurally rather than imported so this module stays dependency-free — and so
  * an SDK upgrade that reshapes these fields fails the test rather than the store.

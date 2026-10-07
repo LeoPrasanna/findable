@@ -397,6 +397,17 @@ Owner testing 1.0.12 on 2026-09-25.
     SIGNED_IN **and on cold start**, because a returning user never fires SIGNED_IN. This
     was precondition 1: without it a real purchase arrives at the webhook attached to
     nobody and the money is taken with no entitlement granted.
+    - [x] ⚠️ **AND IDENTITY CHANGES ARE SERIALIZED, which was a real bug for a day**
+      (found 2026-10-07 by RevenueCat's own `revenuecat-identify-user` skill, installed
+      from their AI toolkit). RevenueCat's rule is `logOut()`, **wait for it**, then
+      `logIn(newId)`; a direct swap **ALIASES the two app user ids**, so on a shared
+      device one Supabase account's subscription can attach to another's. Supabase fires
+      SIGNED_OUT and SIGNED_IN as separate events and neither call site awaits (the auth
+      gate must not block on a billing SDK), so the order RevenueCat saw was whichever
+      request returned first. `serialQueue()` in `billingPlans.ts` makes the ordering a
+      property of the module; a rejected `logOut` (LogOutWithAnonymousUserError is
+      normal) cannot wedge the queue behind it. The test was verified by sabotaging the
+      queue and watching it report `['in','out']`.
   - [x] **Webhook registered** in `app/main.py`. ⚠️ Registration is safe because it is
     **fail-closed by configuration**, not by being unwired: the webhook 401s every call
     without `REVENUECAT_WEBHOOK_TOKEN` and `/sync` 503s without `REVENUECAT_API_KEY`.
