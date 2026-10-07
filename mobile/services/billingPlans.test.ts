@@ -112,4 +112,57 @@ for (const bad of [undefined, null, '', 'FORTNIGHT', 'month ']) {
 // No price at all from the store means we say nothing about price.
 assert.equal(storeTerms({ ...monthly, product: { priceString: '' } }, 'monthly'), null);
 
+/**
+ * ── IDENTITY ORDERING ────────────────────────────────────────────────────────
+ * ⚠️ WHAT THIS PREVENTS IS TWO ACCOUNTS SHARING ONE SUBSCRIPTION. RevenueCat
+ * aliases app user ids when a `logIn` lands before the preceding `logOut` has
+ * finished, so on a shared device account A's purchase can end up attached to
+ * account B. The sign-out and sign-in call sites are fire-and-forget by design —
+ * the auth gate must not block on a billing SDK — so the ORDER has to be a
+ * property of the queue rather than of which network call returns first.
+ */
+import { serialQueue } from './billingPlans.ts';
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+{
+  const log: string[] = [];
+  const run = serialQueue();
+  // Deliberately backwards: the FIRST task is the SLOW one. Unqueued, 'in' would
+  // finish first and that is exactly the aliasing bug.
+  const a = run(async () => { await sleep(40); log.push('out'); });
+  const b = run(async () => { await sleep(1); log.push('in'); });
+  await Promise.all([a, b]);
+  assert.deepEqual(log, ['out', 'in'], 'logOut must complete before logIn starts');
+}
+
+{
+  // A failed task must not wedge the queue behind it: a logOut that rejects
+  // (LogOutWithAnonymousUserError) still has to let the next logIn through.
+  const log: string[] = [];
+  const run = serialQueue();
+  const bad = run(async () => { await sleep(10); log.push('out'); throw new Error('anonymous'); });
+  const good = run(async () => { log.push('in'); });
+  await assert.rejects(() => bad, /anonymous/, 'the failure still reaches its own caller');
+  await good;
+  assert.deepEqual(log, ['out', 'in'], 'a rejection must not stall the queue');
+}
+
+{
+  // Order holds across more than two, and each caller gets its own result.
+  const log: number[] = [];
+  const run = serialQueue();
+  const all = [30, 20, 10, 0].map((ms, i) =>
+    run(async () => { await sleep(ms); log.push(i); return i; }));
+  assert.deepEqual(await Promise.all(all), [0, 1, 2, 3], 'results are per-caller');
+  assert.deepEqual(log, [0, 1, 2, 3], 'strict submission order regardless of duration');
+}
+
+{
+  // Tasks queued later, after the queue has drained, still run.
+  const run = serialQueue();
+  assert.equal(await run(async () => 'first'), 'first');
+  assert.equal(await run(async () => 'second'), 'second');
+}
+
 console.log('billingPlans: ok');

@@ -19,7 +19,7 @@
  */
 import { Platform } from 'react-native';
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
-import { billingKey, packageFor, type PlanId, type StorePackage } from './billingPlans';
+import { billingKey, packageFor, serialQueue, type PlanId, type StorePackage } from './billingPlans';
 
 /**
  * Public SDK keys. ⚠️ THESE ARE PUBLIC BY DESIGN — RevenueCat's platform keys are
@@ -63,27 +63,47 @@ export function configure(userId?: string | null): void {
   }
 }
 
+/**
+ * ⚠️ IDENTITY CHANGES ARE SERIALIZED, AND IT IS NOT A TIDY-UP. RevenueCat's rule for
+ * switching users is `logOut()`, **wait for it**, then `logIn(newId)`: a direct swap
+ * ALIASES the two app user ids, which would attach one Supabase account's subscription
+ * to another on the same device. Supabase fires SIGNED_OUT and SIGNED_IN as separate
+ * events and neither call site awaits (the auth gate must not block on a billing SDK),
+ * so without this queue the order RevenueCat sees is whichever request returns first.
+ * See serialQueue() for the full reasoning.
+ */
+const identityQueue = serialQueue();
+
 /** Point the SDK at this Supabase user (call on sign-in). */
-export async function identify(userId: string): Promise<void> {
-  if (!KEY) return;
+export function identify(userId: string): Promise<void> {
+  if (!KEY) return Promise.resolve();
   configure(userId);
-  if (!ready) return;
-  try {
-    await Purchases.logIn(userId);
-  } catch (e) {
-    console.warn('[billing] logIn failed', e);
-  }
+  if (!ready) return Promise.resolve();
+  return identityQueue(async () => {
+    try {
+      await Purchases.logIn(userId);
+    } catch (e) {
+      console.warn('[billing] logIn failed', e);
+    }
+  });
 }
 
 /** Detach from this user (call on sign-out) so the next account starts clean. */
-export async function forget(): Promise<void> {
-  if (!ready) return;
-  try {
-    await Purchases.logOut();
-  } catch (e) {
-    // logOut throws if the user is already anonymous. Not a problem.
-    console.warn('[billing] logOut failed', e);
-  }
+export function forget(): Promise<void> {
+  if (!ready) return Promise.resolve();
+  return identityQueue(async () => {
+    try {
+      await Purchases.logOut();
+    } catch (e) {
+      // ⚠️ logOut REJECTS when the SDK is already on an anonymous id
+      // (LogOutWithAnonymousUserError), which happens on a sign-out that follows a
+      // launch where nobody ever signed in. RevenueCat's own guidance is to guard it
+      // with a getCustomerInfo() check first; catching is the same outcome without the
+      // extra round trip, and it must stay CAUGHT rather than surfaced — a sign-out
+      // cannot be allowed to fail because of a billing SDK.
+      console.warn('[billing] logOut failed', e);
+    }
+  });
 }
 
 /**
