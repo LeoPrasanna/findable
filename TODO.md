@@ -449,12 +449,60 @@ Owner testing 1.0.12 on 2026-09-25.
     ⚠️ **THE AUTHORED NUMBERS ARE CHOSEN BY DEVICE LOCALE; APPLE AND GOOGLE CHARGE BY
     THE ACCOUNT'S STOREFRONT.** An Indian phone signed into a US App Store was being
     shown ₹99 and would have been billed $7 — a refund request and a review rejection.
-  - [ ] 👤 **Dashboard work, which is yours and cannot be done from here:** create the
-    RevenueCat project, add the iOS + Android apps, create the `pro` entitlement and the
-    two products, then set `EXPO_PUBLIC_RC_IOS_KEY` / `EXPO_PUBLIC_RC_ANDROID_KEY` in
-    EAS and `REVENUECAT_WEBHOOK_TOKEN` / `REVENUECAT_API_KEY` on Render. Point
-    Integrations → Webhooks at `https://<backend>/api/billing/revenuecat` with the same
-    Authorization value.
+  - [~] 👤 **Dashboard work — STARTED by the owner 2026-10-07. Live state read through
+    RevenueCat's MCP server the same day; see the snapshot and the four gaps below.**
+    Remaining: `EXPO_PUBLIC_RC_IOS_KEY` / `EXPO_PUBLIC_RC_ANDROID_KEY` in EAS, and
+    `REVENUECAT_WEBHOOK_TOKEN` / `REVENUECAT_API_KEY` / `REVENUECAT_PRO_ENTITLEMENT` on
+    Render. ⚠️ The Render MCP connector exposes no env-var READ, so whether those three
+    are set has to be confirmed in the dashboard by hand — the endpoints 401 either way,
+    because they are fail-closed.
+
+  - **📸 LIVE REVENUECAT STATE, read 2026-10-07 — a snapshot, it will drift.**
+    Project `proj12bb48e9` "Findable".
+    | Thing | Value |
+    |---|---|
+    | Entitlement | `findable_pro` (`entl15a96c7924`), active, 6 products attached |
+    | Offering | `default` (`ofrng9287c2b429`), `is_current: true`, `paywall_id: null` |
+    | Packages | `$rc_monthly`, `$rc_lifetime`, `$rc_weekly` |
+    | iOS app | `app2209194362`, bundle `com.savehere.app`, ASC API key ✅, subscription key ✅ |
+    | Android app | **none** |
+    | Test Store app | `appfa2c46b8fa` (auto-created with the project) |
+    | Webhooks | **none** |
+    | App Store products | `pro.weekly`, `pro.annually`, `pro.lifetime` — all `duration: null` |
+    | Test Store products | `weekly` (P1W), `monthly` (P1M), `lifetime` |
+
+    - [ ] ⚠️ **GAP 1 — THE CURRENT OFFERING SELLS ONLY TEST STORE PRODUCTS.** All three
+      packages contain Test Store SKUs; the three real App Store products are attached to
+      **no package at all**. StoreKit cannot fetch Test Store SKUs, so on a real build
+      `availablePackages` comes back without them, `billing.packages()` returns null and the
+      paywall renders "Subscriptions are not switched on in this build yet." Safe, but
+      unsellable. **Fix: attach `pro.weekly` and `pro.monthly` to `$rc_weekly` / `$rc_monthly`.**
+    - [ ] ⚠️ **GAP 2 — THERE IS NO MONTHLY APP STORE PRODUCT, and monthly is the plan that
+      carries the ₹99→₹120 intro offer** — the centrepiece of the 2026-08-10 pricing
+      decision. Meanwhile `pro.annually` contradicts `constants/pricing.ts` ("No annual plan
+      is in the shipped paywall; only weekly + monthly") and `pro.lifetime` contradicts
+      `docs/CONTEXT.md`, which **deferred lifetime for v1 over unbounded AI-cost liability**.
+      That reasoning still holds: a one-off payment for an app whose marginal cost is Claude
+      tokens is a liability with no ceiling. **Recommendation: create monthly, leave annually
+      and lifetime detached until the app has UI and a cost model for them.**
+    - [ ] ⚠️ **GAP 3 — NO WEBHOOK, so NOTHING EVER REVOKES.** `/api/billing/sync` grants on
+      purchase, but expirations, refunds and cancellations only arrive by webhook. Without it
+      a lapsed subscriber keeps Pro forever. **Fix: Integrations → Webhooks →
+      `https://savehere-api-staging.onrender.com/api/billing/revenuecat`, Authorization value
+      = `REVENUECAT_WEBHOOK_TOKEN`.**
+    - [ ] ⚠️ **GAP 4 — NO ANDROID APP IN THE PROJECT**, so Android can sell nothing. Needs a
+      Google Play Console account (one-time $25) and the app on a track before Play will allow
+      IAP products at all — i.e. Android billing is structurally further out than iOS. Flagged
+      because platform parity is a standing rule here, not because iOS-first is wrong.
+    - The App Store products report `subscription.duration: null` while the Test Store ones
+      report `P1M`/`P1W`: RevenueCat holds the identifiers but Apple has not confirmed the
+      products, consistent with App Store Connect not being finished.
+    - ✅ **`react-native-purchases@10.11.0` clears every gate we use**, checked against
+      `list-sdk-feature-gates` rather than assumed: Test Store needs react-native `9.5.4`,
+      custom-paywall impression tracking needs `9.14.0`. Everything gated above our version is
+      a feature this app does not use. `paywall_id: null` is correct — the paywall is ours,
+      not a RevenueCat-hosted one; the cost is that paywall impression metrics are not wired
+      (`paywall-custom-impression-tracking` would be the hook if that is ever wanted).
   - [ ] ⚠️ **MERGING THIS BLOCKS ALL OTAs UNTIL BOTH PLATFORMS ARE REBUILT.**
     `react-native-purchases` is a native module, so the Android fingerprint moved
     `7bc363b6…` → `7bc09f03…` (measured 2026-10-07, `fingerprint:compare` against
