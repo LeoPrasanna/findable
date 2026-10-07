@@ -119,7 +119,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 | AI | Anthropic **Claude Haiku** (`claude-haiku-4-5-20251001`) |
 | Extraction | yt-dlp (+ WebVTT caption parser, JSON-LD / Open Graph fallback) |
 | Transcription | OpenAI Whisper (optional, audio fallback — **off unless `OPENAI_API_KEY` is set**) |
-| Billing | **RevenueCat** → Apple IAP (webhook sketched, not yet activated) |
+| Billing | **RevenueCat** → Apple IAP / Play Billing (`react-native-purchases`; code complete, awaiting store products) |
 
 ---
 
@@ -180,6 +180,8 @@ Copy `.env.example` → `.env`. Only `ANTHROPIC_API_KEY` is required to run loca
 | `EXTRACTOR_PROXY_URL` | No | Outbound proxy for all extraction traffic (yt-dlp + httpx). **Unset = free and a true no-op:** no proxy argument is passed anywhere and behaviour is identical. 💸 Setting it to a residential/mobile proxy is usage-priced (~$2–8/GB) with **no ceiling in code** — add the per-user proxy cap in [TODO.md](TODO.md) first. Never point it at a free public proxy list |
 | `SENTRY_DSN` | No | Error monitoring; empty = disabled |
 | `REVENUECAT_WEBHOOK_TOKEN` | Launch | Shared secret for the billing webhook (fail-closed when unset) |
+| `REVENUECAT_API_KEY` | Launch | RevenueCat v1 REST **secret** key, used by `/api/billing/sync` to confirm a purchase server-to-server. Fail-closed: `/sync` returns 503 when unset |
+| `REVENUECAT_PRO_ENTITLEMENT` | No | Entitlement identifier meaning Pro (default `pro`); must match the RevenueCat dashboard exactly |
 | `TRUSTED_PROXY_HOPS` | No | Trusted reverse proxies in front (default `1`; `0` = never trust `X-Forwarded-For`) |
 | `AI_DAILY_LIMIT` / `AI_FREE_DAILY_LIMIT` / `AI_PRO_DAILY_LIMIT` | No | Daily AI actions per tier (trial 10 / free 3 / pro 20) |
 | `TRIAL_DAYS` / `FREE_SAVE_LIMIT` | No | Trial length (10) and post-trial save cap (20) |
@@ -273,7 +275,7 @@ All `/api/*` routes require a Supabase `Bearer` token and are scoped to the call
 Every AI feature spends Claude tokens, so spend is bounded in four independent layers:
 
 1. **Per-user daily quota** — the real ceiling. Every AI action (summary, re-summary, recipe, workout, itinerary, ask) draws from one budget keyed on the Supabase user id. The charge is a single **atomic conditional `UPDATE`**, so concurrent requests can't overshoot; it's DB-backed, so it survives restarts and can't be reset by rotating IPs. Any new AI endpoint **must** call `charge_ai_action()`.
-2. **Tier limits** — trial 30/day, post-trial free 3/day, pro 100/day (all env-tunable).
+2. **Tier limits** — trial 10/day + 100 saves, post-trial free 3/day + 50 saves, pro 20/day + 500 saves (all env-tunable). Saves past a cap are **locked, never deleted** — `app/library_lock.py`.
 3. **Per-reel caps** — recipes/tasks generate once (then you edit by hand), workouts ×3, itineraries ×3.
 4. **Per-IP burst guard** — an anti-loop layer beneath the quota, proxy-aware (`X-Forwarded-For` is read from the right past `TRUSTED_PROXY_HOPS`, so a client can't forge it).
 
@@ -326,7 +328,7 @@ python scripts/set_tier.py <user-id> pro         # → pro — then sign out and
 2. **Environments** — dev / staging / prod (no PreProd: with one developer, staging *is* preprod).
 3. **Apple + Google sign-in** — Apple's guideline 4.8 makes the pair mandatory once Google is offered; also removes the SMTP blocker for signups.
 4. **iOS Share Extension** + Apple Developer account — the core capture flow.
-5. **RevenueCat / Apple IAP** — the webhook is written and tested but deliberately not registered yet.
+5. **RevenueCat / Apple IAP** — the purchase flow is built and registered (2026-10-07): SDK, `Purchases.logIn(supabaseUserId)`, the webhook, and `POST /api/billing/sync` for the immediate grant. It is **fail-closed by configuration** — nothing can be bought until the dashboard is set up and the two intro prices are decided, which is now the critical path to launch.
 
 Open work in **[TODO.md](TODO.md)** — it's the release gate. The reasoning behind every decision above, plus the bugs that cost real time, is in **[docs/SHIPPED.md](docs/SHIPPED.md)**. Architecture lives in **[docs/CONTEXT.md](docs/CONTEXT.md)**.
 
