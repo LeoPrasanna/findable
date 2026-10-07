@@ -90,8 +90,8 @@ services:
         sync: false
       - key: REVENUECAT_API_KEY         # RC v1 REST SECRET key (never the app's public key)
         sync: false
-      - key: REVENUECAT_PRO_ENTITLEMENT # code default: pro
-        value: "pro"
+      - key: REVENUECAT_PRO_ENTITLEMENT # must match RevenueCat EXACTLY or it entitles nobody
+        value: "findable_pro"
 
   # ── PRODUCTION (deferred until launch — commented out on purpose) ───────────
   # Kept out of the active blueprint so it stays 100% free-tier for now: a paid
