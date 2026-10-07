@@ -14,11 +14,41 @@ never touches the production database or auth again. Read this alongside
 
 Two Supabase projects (both AWS ap-south-1):
 - **`SaveHere`** = PRODUCTION, ref `lukmwwcilrjqqtgqbynq` — real users, **keep clean**.
+  ⚠️ **IT IS NOT READY, AND NOTHING ELSE SAYS SO.** Measured 2026-10-07 by reading both
+  projects directly: see "Production database is stale" below before any prod deploy.
 - **`savehere-dev`** = DEV + STAGING — disposable. **Decision 2026-07-21: SQLite is retired
   for local dev.** Local dev, GitHub Codespaces, and the staging Render service all share the
   **one** `savehere-dev` Postgres, so data persists across ephemeral machines (Codespace disks
   are wiped on rebuild). With one developer, **staging is preprod** (no separate PreProd env).
   Trade-off accepted: local experiments and the staging service share state — fine pre-launch.
+
+## ⚠️ Production database is stale — read before deploying prod
+
+Measured 2026-10-07 against both projects. **Staging is the only deployed environment**, so
+every real account and save lives in `savehere-dev`, and `SaveHere` has been untouched since
+the 2026-07-21 split. Three gaps, none of which announce themselves:
+
+| | `savehere-dev` (dev + staging) | `SaveHere` (prod) |
+|---|---|---|
+| Alembic head | `e5b8d2f41c07` | **`9aa25548aadb`** — ~2.5 months behind |
+| `todos` table | present (23 rows) | **absent** — the migration never ran |
+| `FORCE ROW LEVEL SECURITY` | **9 / 9 tables** | **0 / 9 tables** |
+| `ensure_rls` event trigger | present | present |
+| Users | 9, 4 active in the last week | 16, **none active since 2026-07-20** |
+
+1. **Run the migrations.** `alembic upgrade head` against the prod pooler. Until then prod is
+   missing `todos` entirely and any schema change since July.
+2. **Run `backend/scripts/enable_rls.sql`.** RLS is `ENABLE`d on prod but `FORCE` is applied to
+   nothing. That script's own header explains why FORCE is the half that matters: without it the
+   table OWNER role still bypasses RLS, and the anon key ships inside every copy of the app.
+   ⚠️ The `ensure_rls` trigger does **not** cover this — it only ever calls `ENABLE`.
+3. **The 16 user rows in prod are pre-split leftovers**, not a production userbase. Nothing has
+   signed in there since 2026-07-20. Do not read that number as traffic, and decide deliberately
+   whether they are carried forward or cleared before launch.
+
+⚠️ **The GitHub "Supabase Preview" integration points at `lukmwwcilrjqqtgqbynq`** — the prod
+project — and reports `skipping` on every PR. Harmless while it skips; worth knowing it is aimed
+at prod and not at the database the code is actually tested against.
 
 ## No code branching — just different values
 

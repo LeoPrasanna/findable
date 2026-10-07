@@ -386,6 +386,23 @@ Owner testing 1.0.12 on 2026-09-25.
 
 
 
+- [ ] 🔴 **The PRODUCTION Supabase project is stale and under-hardened** (measured
+  2026-10-07 by reading both projects through the Supabase connector). Staging is the only
+  deployed environment, so all 9 real accounts and 294 saves live in `savehere-dev`; `SaveHere`
+  (prod, `lukmwwcilrjqqtgqbynq`) has been untouched since the 2026-07-21 split. Full table in
+  [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) → "Production database is stale".
+  - [ ] **`alembic upgrade head`** against the prod pooler. Prod is at `9aa25548aadb` vs
+    staging's `e5b8d2f41c07`, and the `todos` table **does not exist there at all**.
+  - [ ] **Run `backend/scripts/enable_rls.sql`.** ⚠️ RLS is `ENABLE`d on prod but
+    `FORCE` is applied to **0 of 9 tables** (staging: 9/9). That script's header is explicit
+    that FORCE is the half that closes the hole — without it the table OWNER role still
+    bypasses RLS, and the anon key ships inside every copy of the app. The `ensure_rls` event
+    trigger does NOT cover this: it only ever calls `ENABLE`.
+  - [ ] **Decide what happens to the 16 pre-split user rows in prod.** Nothing has signed in
+    there since 2026-07-20. They are leftovers, not traffic — carry them forward or clear
+    them, but deliberately.
+  - ⚠️ **Nothing would have told you any of this.** Prod has no deployed service pointing
+    at it, so no request has ever exercised it. It fails the first time it matters.
 - [~] 🔴 👤 **RevenueCat — the CODE IS DONE (2026-10-07); what remains is
   dashboard work and two prices.** This is still the real gate on public launch: a free
   account at the 50-save wall is shown a paywall, and until the steps below are done
