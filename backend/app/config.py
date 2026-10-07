@@ -50,9 +50,12 @@ class Settings:
     # of waiting for the webhook. Empty = /sync returns 503 and the webhook stays
     # the only path. ⚠️ SECRET, not the public SDK key the app ships.
     REVENUECAT_API_KEY: str = os.getenv("REVENUECAT_API_KEY", "")
-    # The entitlement identifier configured in RevenueCat that means "Pro". Must
-    # match the dashboard exactly; a typo silently entitles nobody.
-    REVENUECAT_PRO_ENTITLEMENT: str = os.getenv("REVENUECAT_PRO_ENTITLEMENT", "pro")
+    # The entitlement identifier configured in RevenueCat that means "Pro".
+    # ⚠️ MUST MATCH THE DASHBOARD EXACTLY, AND A MISMATCH IS SILENT: no error, no
+    # log, every purchase simply grants nothing. The default was `pro` for one day
+    # (2026-10-07) while the real project used `findable_pro` — caught by reading the
+    # live config through RevenueCat's MCP server, not by anything failing.
+    REVENUECAT_PRO_ENTITLEMENT: str = os.getenv("REVENUECAT_PRO_ENTITLEMENT", "findable_pro")
     ENV: str = os.getenv("ENV", "development")
     # Comma-separated browser origins allowed in production (the deployed web app's
     # URL). "*" allows any origin — acceptable while there's no cookie-based auth.
