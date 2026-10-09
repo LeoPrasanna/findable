@@ -148,3 +148,44 @@ export function storeTerms(pkg: StorePackage, plan: PlanId): string | null {
   }
   return `Auto-renews ${cadence} at ${standard} until cancelled.`;
 }
+
+/**
+ * What to tell someone after `/api/billing/sync`, given whether money moved.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE APP ONCE SAID "YOU'RE ON PRO" TO PEOPLE WHO WERE NOT.
+ * `apply()` called `/sync`, threw the response away, and showed the success
+ * dialog on any 2xx. `/sync` answers `{tier: null, active: false}` when
+ * RevenueCat has never heard of you — a perfectly successful request meaning
+ * "nothing found" — so tapping Restore with nothing to restore congratulated you
+ * on a subscription you did not have. Nothing was granted server-side; it was a
+ * lying dialog, which is its own kind of harm on a payment screen.
+ *
+ * ⚠️ `paid` IS THE WHOLE REASON THIS TAKES TWO ARGUMENTS. The same sync result
+ * means different things on the two paths, and the reassuring sentences are only
+ * true on one of them:
+ *
+ *   - After a PURCHASE, Apple or Google already took the money before this app
+ *     heard anything. `active: false` means "not applied yet", never "it failed",
+ *     and the webhook will finish the job within the hour. Saying the wrong one
+ *     of those to someone holding a receipt is how a refund request starts.
+ *   - After a RESTORE, no money moved at all. Every sentence about a payment is
+ *     false there — including on the error path, where the old code's "Payment
+ *     received" would have been pure invention.
+ *
+ * `active: null` means the sync itself failed (threw), not that it answered no.
+ */
+export type SyncVerdict =
+  /** Entitlement confirmed by the server. The only path that may claim Pro. */
+  | 'pro'
+  /** Paid, but the server has not caught up. Reassure; do not claim Pro. */
+  | 'pending'
+  /** Restore found nothing. Say so plainly — no money was involved. */
+  | 'none'
+  /** The sync call failed on a path where nothing was paid. */
+  | 'failed';
+
+export function syncVerdict(paid: boolean, active: boolean | null): SyncVerdict {
+  if (active === null) return paid ? 'pending' : 'failed';
+  if (active) return 'pro';
+  return paid ? 'pending' : 'none';
+}

@@ -10,7 +10,7 @@ import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, Index, FilledButton, TextAction } from '../components/kit';
 import * as haptics from '../services/haptics';
 import * as billing from '../services/billing';
-import { packageFor, storeTerms, type StorePackage } from '../services/billingPlans';
+import { packageFor, storeTerms, syncVerdict, type StorePackage } from '../services/billingPlans';
 import { api } from '../services/api';
 import { supabase } from '../services/supabase';
 import { refreshUsage } from '../services/usageCache';
@@ -84,31 +84,61 @@ export default function ProScreen() {
   };
 
   /**
-   * Apply a completed purchase.
+   * Apply a completed purchase or restore.
    *
-   * ⚠️ IF THE SYNC FAILS, THE PURCHASE STILL HAPPENED. The money is taken by
-   * Apple or Google before this app hears anything, so a failed sync is never
-   * "the purchase failed" — it is "we have not applied it yet", and the webhook
-   * will apply it within the hour regardless. Saying the wrong one of those to
-   * someone who has just paid is how a refund request starts.
+   * ⚠️ IT READS THE SYNC RESPONSE NOW. It used to call `/sync`, throw the body
+   * away and show "You're on Pro" on any 2xx — but `{tier: null, active: false}`
+   * is a perfectly successful answer meaning "RevenueCat has never heard of you".
+   * So Restore, with nothing to restore, congratulated people on a subscription
+   * they did not have. The branch table lives in `syncVerdict` with its own
+   * tests; this function only picks the sentence.
+   *
+   * ⚠️ `paid` SEPARATES THE TWO PATHS AND IS NOT COSMETIC. After a purchase the
+   * money is already gone — "not applied yet" must never read as "it failed", and
+   * the webhook finishes the job within the hour. After a restore nothing was
+   * charged, so every sentence about a payment is simply untrue.
    */
-  const apply = async () => {
+  const apply = async (paid: boolean) => {
+    // null means the call FAILED, which is not the same as the server saying no.
+    let active: boolean | null = null;
     try {
-      await api.syncBilling();
+      ({ active } = await api.syncBilling());
       // Re-mint the JWT so the new app_metadata.tier claim is in hand — the
       // claim is what the server reads, not the Supabase user row.
       await supabase.auth.refreshSession();
       await refreshUsage();
+    } catch {
+      // Swallowed on purpose: `active` stays null and the verdict handles it.
+    }
+
+    const verdict = syncVerdict(paid, active);
+    if (verdict === 'pro') {
       haptics.success();
       tell('You’re on Pro', 'Everything is unlocked. Thanks for backing Findable.');
-    } catch {
+    } else if (verdict === 'pending') {
       haptics.success();
       tell(
         'Payment received',
         'Your purchase went through. It can take up to an hour to appear — reopen the app if it has not by then, and nothing is lost either way.',
       );
+    } else if (verdict === 'none') {
+      haptics.tap();
+      tell(
+        'Nothing to restore',
+        'This account has no active Findable subscription. If you subscribed with a different Apple ID or Google account, sign in to that one and restore from there.',
+      );
+    } else {
+      haptics.error();
+      tell(
+        'Couldn’t check',
+        'We could not reach Findable to look up your subscription. Nothing was charged — try again in a moment.',
+      );
     }
-    router.back();
+
+    // ⚠️ ONLY LEAVE IF SOMETHING HAPPENED. Closing the paywall after "nothing to
+    // restore" takes away the screen they still need; the old code dismissed it
+    // unconditionally because every outcome was treated as success.
+    if (verdict === 'pro' || verdict === 'pending') router.back();
   };
 
   const buy = async () => {
@@ -121,7 +151,7 @@ export default function ProScreen() {
     if (out.status === 'cancelled') return;
     if (out.status === 'unavailable') return tell('Not available yet', UNAVAILABLE);
     if (out.status === 'error') { haptics.error(); return tell('Nothing was charged', out.message); }
-    await apply();
+    await apply(true);
   };
 
   const restore = async () => {
@@ -132,7 +162,7 @@ export default function ProScreen() {
     if (out.status === 'cancelled') return;
     if (out.status === 'unavailable') return tell('Not available yet', UNAVAILABLE);
     if (out.status === 'error') { haptics.error(); return tell("Couldn't restore", out.message); }
-    await apply();
+    await apply(false);
   };
 
   const open = (url: string) => { haptics.tap(); WebBrowser.openBrowserAsync(url); };

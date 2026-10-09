@@ -165,4 +165,32 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   assert.equal(await run(async () => 'second'), 'second');
 }
 
+/**
+ * ── WHAT TO SAY AFTER A SYNC ───────────────────────────────────────────
+ * ⚠️ THE ROW THAT MATTERS IS (false, false). That is "tapped Restore, owns
+ * nothing", and the app used to answer "You're on Pro — everything is unlocked."
+ * `/sync` returns 200 with `{tier: null, active: false}` for that case, and the
+ * old code showed the success dialog on any 2xx without reading the body.
+ */
+import { syncVerdict } from './billingPlans.ts';
+
+assert.equal(syncVerdict(false, false), 'none',
+  'restore with no entitlement must NOT claim Pro');
+assert.equal(syncVerdict(false, null), 'failed',
+  'a failed sync after a restore must not mention a payment — none was made');
+
+// Paid paths: the money is already gone, so "not yet" is never "it failed".
+assert.equal(syncVerdict(true, false), 'pending', 'paid, server not caught up');
+assert.equal(syncVerdict(true, null), 'pending', 'paid, sync threw — still reassure');
+
+// Server says yes — the only verdict allowed to claim Pro, by either route.
+assert.equal(syncVerdict(true, true), 'pro');
+assert.equal(syncVerdict(false, true), 'pro', 'a genuine restore does claim Pro');
+
+// Only the server grants. `paid` never promotes a negative answer to 'pro'.
+for (const paid of [true, false]) {
+  assert.notEqual(syncVerdict(paid, false), 'pro', `paid=${paid} must not self-grant`);
+  assert.notEqual(syncVerdict(paid, null), 'pro', `paid=${paid} must not grant on failure`);
+}
+
 console.log('billingPlans: ok');
