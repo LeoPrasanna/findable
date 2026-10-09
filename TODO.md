@@ -452,6 +452,37 @@ Owner testing 1.0.12 on 2026-09-25.
   dashboard work and two prices.** This is still the real gate on public launch: a free
   account at the 50-save wall is shown a paywall, and until the steps below are done
   that paywall cannot take money.
+
+  ⏸️ **PARKED 2026-10-09 by the owner** — "resume later this week", to do features and
+  cosmetic work first. Nothing below is blocked on a decision; it is all dashboard
+  clicking and two prices. **Every credential is set and PROVEN**, so a cold session
+  does not need to re-verify any of them:
+
+  | credential | where | proof |
+  |---|---|---|
+  | `REVENUECAT_API_KEY` | Render (v1 secret) | `GET /v1/subscribers/<id>` → **201** |
+  | `REVENUECAT_WEBHOOK_TOKEN` | Render + RC dashboard | RC's own test event → **200**; no/wrong header → 401 |
+  | `REVENUECAT_PRO_ENTITLEMENT` | Render | `findable_pro`, matches RC exactly |
+  | `EXPO_PUBLIC_RC_IOS_KEY` | EAS preview + production | `appl_…` public key, shipped via OTA |
+  | EAS ↔ App Store Connect | ASC key `XUYH77BDX6` | `eas submit --wait` uploaded 1.0.14 |
+
+  ⚠️ **`XUYH77BDX6` IS SHARED between EAS Submit and RevenueCat.** Revoking it breaks
+  both, and the only symptom you get is "Something went wrong" from `eas submit`. That
+  is how two days were lost on 2026-10-07–09.
+
+  **Resume here, in this order:**
+  1. Install 1.0.14 from TestFlight → **Restore purchases** → expect "Nothing to
+     restore" (this is the #139 fix; it is the one thing that can be checked today).
+  2. GAP 1 — fill `pro.weekly` + `pro.annually` in App Store Connect until
+     `get-product-store-state` reports `ok`, not `MISSING_METADATA`.
+  3. GAP 2 — create the monthly App Store product; decide the two intro prices.
+  4. Attach the real products to `$rc_weekly` / `$rc_monthly` (does nothing before 2).
+  5. Check the Paid Applications Agreement is signed, or nothing sells regardless.
+  6. GAP 4 — Android needs a Play Console account ($25) and the app on a track.
+
+  Cosmetic leftovers, safe to ignore: rename ASC key `XUYH77BDX6` to say that both EAS
+  and RevenueCat depend on it, and delete the junk `nonexistent-test-user` RC subscriber
+  created while probing the API.
   - [x] **SDK wired.** `react-native-purchases@10.11.0`, `services/billing.ts` wraps it
     and every export is safe to call when billing does not exist (web, no keys, SDK
     failed to init) — the paywall then renders read-only rather than crashing.
@@ -512,16 +543,26 @@ Owner testing 1.0.12 on 2026-09-25.
     | iOS app | `app2209194362`, bundle `com.savehere.app`, ASC API key ✅, subscription key ✅ |
     | Android app | **none** |
     | Test Store app | `appfa2c46b8fa` (auto-created with the project) |
-    | Webhooks | **none** |
+    | Webhooks | `whintgr281fe2bdfe` → staging, all events, all environments — ✅ verified 2026-10-09 |
     | App Store products | `pro.weekly`, `pro.annually`, `pro.lifetime` — all `duration: null` |
     | Test Store products | `weekly` (P1W), `monthly` (P1M), `lifetime` |
 
-    - [ ] ⚠️ **GAP 1 — THE CURRENT OFFERING SELLS ONLY TEST STORE PRODUCTS.** All three
-      packages contain Test Store SKUs; the three real App Store products are attached to
-      **no package at all**. StoreKit cannot fetch Test Store SKUs, so on a real build
-      `availablePackages` comes back without them, `billing.packages()` returns null and the
-      paywall renders "Subscriptions are not switched on in this build yet." Safe, but
-      unsellable. **Fix: attach `pro.weekly` and `pro.monthly` to `$rc_weekly` / `$rc_monthly`.**
+    - [ ] ⚠️ **GAP 1 — THE REAL APP STORE PRODUCTS ARE EMPTY SHELLS, which is a bigger
+      problem than them being unattached.** Measured 2026-10-09 via `get-product-store-state`:
+      both `pro.weekly` and `pro.annually` report `MISSING_METADATA` with **no territory
+      prices, no availability in any territory, and no localizations**. Apple will not sell a
+      product in that state and StoreKit will not return it.
+
+      ⚠️ **SO "JUST ATTACH THEM TO THE PACKAGES" DOES NOTHING** — the paywall would still
+      say "Subscriptions are not switched on in this build yet", for a third distinct reason,
+      and the next person would debug the attachment rather than the product. Finish the
+      products in App Store Connect FIRST: price per territory, availability, localized name
+      and description, and the subscription group's own localization. Re-check with
+      `get-product-store-state` until `store_status.status` is `ok`, THEN attach to
+      `$rc_weekly` / `$rc_monthly`.
+
+      The three packages currently hold Test Store SKUs only, which is why the paywall is
+      safe and unsellable rather than broken.
     - [ ] ⚠️ **GAP 2 — THERE IS NO MONTHLY APP STORE PRODUCT, and monthly is the plan that
       carries the ₹99→₹120 intro offer** — the centrepiece of the 2026-08-10 pricing
       decision. Meanwhile `pro.annually` contradicts `constants/pricing.ts` ("No annual plan
