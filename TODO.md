@@ -48,16 +48,61 @@ because a pause is reversible. A deletion would not have been.
 
 ---
 
-## ▶ OTA CHANNEL — FROZEN AGAIN until 1.0.13 / build 14 are installed
+## ▶ OTA CHANNEL — current runtimes (updated 2026-10-09)
 
-Builds fired 2026-10-06 from `a0ee617` (the iOS share-outcome subscriber). **Both
-runtimes moved**, so an update published from `develop` now reaches NOTHING on the
-builds people are carrying, and a mismatched update does not warn.
+Builds fired 2026-10-07 from `4f73d74` (#131, RevenueCat). **Both runtimes moved again**,
+because `react-native-purchases` is a native module. An update published from `develop`
+reaches only these two builds, and a mismatched update does not warn.
 
-| Platform | New runtime | Build | Previous |
+| Platform | Runtime | Build | Previous |
 |---|---|---|---|
-| iOS | `01741a6e204911edf5c38d7ef1753efb045f49bd` | 1.0.13 (uploaded to ASC) | `6deee3ef…` (1.0.12) |
-| Android | `7bc363b681d7cc292750e39c0c36b635f2d00a88` | build 14 (versionCode 14) | `19e8d21e…` (12 and 13) |
+| iOS | `a341cf3cd345fae578dff966680f913867d5d272` | 1.0.14 (submitted 2026-10-09) | `01741a6e…` (1.0.13) |
+| Android | `7bc09f03530ecf95866038dea56d20c9ee15a095` | build 15 (versionCode 15) | `7bc363b6…` (build 14) |
+
+### ⚠️ A BACKPORT CAN REACH AN OLDER BUILD, AND IT IS NOT A HACK
+
+On 2026-10-09 the owner was stranded on 1.0.13 for two days while #137/#138 sat on a
+runtime nothing could install. The fix: **JS is not in the fingerprint**, so checking out
+the commit the stranded build came from and copying the JS-only change onto it produces a
+tree that fingerprints as that build's runtime.
+
+```bash
+git checkout -b tmp/backport <commit the build was made from>
+git checkout <develop commit> -- <the JS files only>
+npx eas-cli@latest fingerprint:compare --build-id <the stranded build>   # MUST match
+npx eas-cli@latest update --channel preview --environment preview --platform ios -m "..."
+```
+
+The `fingerprint:compare` step is the gate — if it does not match, abort. Use this only to
+unstick someone; the update is superseded the moment the newer build installs, so never
+build on it. Verify the files have not diverged first (`git log <old>..<new> -- <files>`).
+
+### ⚠️ "SCHEDULED" IS NOT "SUBMITTED" — TWO SILENT FAILURES IN ONE DAY
+
+2026-10-09: an iOS submission was reported as queued and **never reached App Store
+Connect**, twice, costing an afternoon of debugging the wrong layer.
+
+1. **The Expo MCP connector's `build_submit` returned `IN_QUEUE` and delivered nothing.**
+   It has no `--wait`, no status readback, and `build_info` does not carry submission
+   state — the failure is invisible from inside a session. **Submit with the CLI and
+   `--wait`.** `✔ Submitted your app` is the success line; `✔ Scheduled iOS submission`
+   means nothing yet.
+2. **The root cause was a revoked App Store Connect API key.** `8956SRK96D`
+   (`[Expo] EAS Submit QVRCA5LiDi`) was revoked on 2026-10-07 during RevenueCat setup,
+   while EAS kept using it. Apple answered 401 and EAS reported "Something went wrong".
+   Replaced via `eas credentials --platform ios` with `XUYH77BDX6`, which RevenueCat also
+   uses — **so revoking that key now breaks submissions AND billing.**
+
+**Always confirm in App Store Connect → TestFlight → Build Uploads.** That list is the only
+thing that proves a binary arrived.
+
+### ⚠️ NOTHING CAN SEE WHAT BUILD A DEVICE IS RUNNING
+
+EAS Observe returns empty for this project — no telemetry SDK is installed — so
+`observe_versions` cannot tell you what is in the field. The in-app `v1.0.0` in
+ProfilePanel is a hardcoded constant and is useless for this. Ask, or read it from
+TestFlight. The update button in the profile panel is the practical tell: it renders only
+when the server has something for that runtime, so **no button means mismatch**.
 
 ⚠️ **The Android runtime moved because of an iOS-only file.** `withInvisibleShareIOS.js`
 is a config plugin, and config-plugin files are hashed for every platform — predicted by
@@ -86,8 +131,8 @@ backwards — the update applies happily on top of a stale native share service.
 fingerprint proves an update will REACH a build and nothing about whether the native half
 of the change is in it.
 
-Delete this section's "FROZEN" framing once both builds are installed, and put the two
-runtimes above in the table.
+Update the table above whenever a build ships — a stale runtime here is how a session
+publishes an update that reaches nothing.
 
 ## ▶ 1.0.12 FIELD TEST — two bugs, and only one of them can be fixed over the air
 
@@ -485,11 +530,16 @@ Owner testing 1.0.12 on 2026-09-25.
       That reasoning still holds: a one-off payment for an app whose marginal cost is Claude
       tokens is a liability with no ceiling. **Recommendation: create monthly, leave annually
       and lifetime detached until the app has UI and a cost model for them.**
-    - [ ] ⚠️ **GAP 3 — NO WEBHOOK, so NOTHING EVER REVOKES.** `/api/billing/sync` grants on
-      purchase, but expirations, refunds and cancellations only arrive by webhook. Without it
-      a lapsed subscriber keeps Pro forever. **Fix: Integrations → Webhooks →
-      `https://savehere-api-staging.onrender.com/api/billing/revenuecat`, Authorization value
-      = `REVENUECAT_WEBHOOK_TOKEN`.**
+    - [x] ✅ **GAP 3 — WEBHOOK CREATED AND VERIFIED END TO END** (2026-10-09). Integration
+      `whintgr281fe2bdfe` → `https://savehere-api-staging.onrender.com/api/billing/revenuecat`,
+      all events, all environments (so sandbox TestFlight purchases are covered too).
+      Verified: no header → 401, wrong value → 401, correct value → 200, and RevenueCat's own
+      "Send test event" → 200. The test payload carried `type: TEST`, which is in neither
+      `_GRANT` nor `_REVOKE`, so no tier was written.
+      ⚠️ **The Authorization header cannot be set through the RevenueCat API** — neither
+      `create-webhook-integration` nor `update-webhook-integration` accepts it. It is
+      dashboard-only, so a webhook created programmatically is inert until someone pastes the
+      token in by hand, and it looks configured the whole time.
     - [ ] ⚠️ **GAP 4 — NO ANDROID APP IN THE PROJECT**, so Android can sell nothing. Needs a
       Google Play Console account (one-time $25) and the app on a track before Play will allow
       IAP products at all — i.e. Android billing is structurally further out than iOS. Flagged
