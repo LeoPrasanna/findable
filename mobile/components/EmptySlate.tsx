@@ -28,7 +28,7 @@ import { colors, spacing, themed } from '../constants/theme';
 
 /** Bar widths, one per row. Varying them is what stops three identical bars
  *  reading as a loading skeleton. */
-const ROWS = [96, 66, 80];
+const ROWS = [140, 96, 116];
 
 const TICK_MS = 420;
 /** Gap between one row ticking and the next. */
@@ -96,7 +96,19 @@ export function EmptySlate() {
   }, [still, ticks]);
 
   return (
-    <View style={styles.wrap} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    /**
+     * ⚠️ THIS CARRIES THE SCREEN-READER TEXT NOW. It used to be hidden, because the
+     * kicker and title underneath said it in words. The owner deleted those, so a
+     * hidden drawing would have left VoiceOver and TalkBack with an empty screen —
+     * the sighted change must not become a blind regression.
+     */
+    <View
+      style={styles.wrap}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel="All clear. Nothing to follow through on."
+    >
+      <View style={styles.list}>
       {ROWS.map((width, i) => {
         const t = ticks[i];
         return (
@@ -116,7 +128,7 @@ export function EmptySlate() {
                   },
                 ]}
               >
-                <Icon name="checkmark" size={13} color={colors.textPrimary} />
+                <Icon name="checkmark" size={18} color={colors.textPrimary} />
               </Animated.View>
             </View>
 
@@ -147,6 +159,7 @@ export function EmptySlate() {
           </View>
         );
       })}
+      </View>
     </View>
   );
 }
@@ -158,26 +171,30 @@ export function EmptySlate() {
  * is 10% white: correct for a tile seam, invisible for the subject of a drawing.
  * These use the TEXT ramp instead, so the parts carry the same weight as type.
  */
-const BOX = 18;
+const BOX = 26;
 
 const styles = themed(() => StyleSheet.create({
-  wrap: { gap: 10, marginBottom: spacing.lg, alignItems: 'flex-start' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Takes over the centring `EmptyState` used to do, now that it is the only
+  // thing on the screen. `list` stays left-aligned so the ragged right edge still
+  // reads as a checklist rather than as three centred dashes.
+  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  list: { gap: 16, alignItems: 'flex-start' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   box: { width: BOX, height: BOX, alignItems: 'center', justifyContent: 'center' },
   ring: {
     position: 'absolute',
     top: 0, right: 0, bottom: 0, left: 0,
     borderWidth: 1,
     borderColor: colors.textTertiary,
-    borderRadius: 5,
+    borderRadius: 7,
   },
   check: { alignItems: 'center', justifyContent: 'center' },
-  bar: { height: 3, justifyContent: 'center' },
-  barFill: { backgroundColor: colors.textTertiary, borderRadius: 1.5 },
+  bar: { height: 4, justifyContent: 'center' },
+  barFill: { backgroundColor: colors.textTertiary, borderRadius: 2 },
   strike: {
     position: 'absolute',
     left: 0, right: 0,
-    height: 1,
+    height: 1.5,
     backgroundColor: colors.textSecondary,
   },
 }));
