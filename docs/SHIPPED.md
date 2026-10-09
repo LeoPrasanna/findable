@@ -21,6 +21,73 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ 🔴 THE BACKEND COULD NOT LOG (2026-10-09) — alembic silenced it at startup
+
+**Symptom:** nothing the app logged ever reached Render. Not `[BILLING]` lines, not
+uvicorn's access log, not even `Application startup complete`. The stream always
+stopped at the last alembic line and never printed another word, for the whole life
+of the process.
+
+**It was NOT buffering.** That was the first diagnosis and it was wrong, which cost a
+deploy: `PYTHONUNBUFFERED=1` was added to `render.yaml`, the service redeployed, and
+the logs were exactly as silent as before. Logging writes to **stderr**, which Python
+does not block-buffer, so the hypothesis could never have been right.
+
+**The real cause** is one line in `backend/alembic/env.py`:
+
+```python
+fileConfig(config.config_file_name)
+```
+
+`logging.config.fileConfig` defaults to **`disable_existing_loggers=True`**, and
+`alembic.ini` declares `[logger_root] level = WARNING`. Migrations run inside the
+app's `@app.on_event("startup")` hook — i.e. *after* `main.py` has configured logging
+and after every route module has been imported. So that call:
+
+1. set `disabled = True` on **every logger that already existed** — `uvicorn`,
+   `uvicorn.access`, `app.routes.billing`, all of them; and
+2. dropped the root level to WARNING, so even a logger created later lost its INFO.
+
+Reproduced in six lines before touching anything:
+
+```
+INFO app.routes.billing: [BILLING] BEFORE fileConfig     ← printed
+INFO uvicorn.access:     ACCESS BEFORE fileConfig        ← printed
+# fileConfig('alembic.ini')
+# [BILLING] AFTER fileConfig                             ← nothing. not even WARNING.
+--- billing.disabled = True | root level = 30
+```
+
+**The fix** is to let `alembic.ini` own logging only when Alembic *is* the whole
+process. `main.py` installs a root handler at import, so the presence of one says we
+are inside the app:
+
+```python
+if config.config_file_name is not None and not logging.getLogger().handlers:
+    fileConfig(config.config_file_name)
+```
+
+The standalone `alembic` CLI is unaffected — no handler exists there, so it still
+configures itself from the ini exactly as before.
+
+**Why this got a test** (`backend/tests/test_logging_survives_startup.py`): nothing
+errors when it breaks. There is no exception, no warning, no failed request — the
+service just stops being able to tell you anything, and you find out days later when
+you go looking for a payment. The test pins the root level to INFO, runs the real
+startup through `TestClient`, and asserts `app.routes.billing` is neither disabled nor
+raised above INFO. Sabotage-verified by restoring the old line: it fails with
+*"startup reset the ROOT log level to WARNING"*.
+
+`PYTHONUNBUFFERED=1` was **kept** — it is standard for a Python service and does stop
+`print()` and tracebacks being swallowed — but its comment in `render.yaml` now says
+plainly that it did not fix this, so the next person does not reach for it first.
+
+⚠️ **The cost of the bug:** this is why the RevenueCat webhook work on 2026-10-07–09
+had to be verified by HTTP response bodies instead of logs. A real purchase grant
+(`[BILLING] INITIAL_PURCHASE → tier=pro`) would have been invisible.
+
+---
+
 ## ▶ OWNER ROUND (2026-09-17) — 6 items: two screens, Threads, shopping, OTA banner
 
 All six shipped together. The reasoning that outlives the diff:
