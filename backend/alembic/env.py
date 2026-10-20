@@ -8,6 +8,7 @@ target whatever the app targets: SQLite locally, Supabase Postgres in prod.
 columns in place — batch mode rebuilds the table. Harmless on Postgres.
 """
 import sys
+import logging
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -26,7 +27,17 @@ config = context.config
 # Feed the app's real DB URL into Alembic (overrides any alembic.ini value).
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
-if config.config_file_name is not None:
+# ⚠️ ONLY let alembic.ini own logging when Alembic IS the whole process.
+# `fileConfig` defaults to disable_existing_loggers=True and sets the root logger
+# to WARNING, so when the APP runs migrations at startup (main.py's startup hook)
+# this call DISABLES every logger already created - uvicorn, uvicorn.access and
+# every app module imported before it - and the backend goes silent for the rest
+# of its life. Measured 2026-10-09: Render's log stream stopped at the last
+# alembic line and never printed another word, so a webhook that provably ran
+# `logger.warning` logged NOTHING. Billing was running blind.
+# main.py installs a root handler at import time, so the presence of one is the
+# signal that we are inside the app rather than the standalone `alembic` CLI.
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

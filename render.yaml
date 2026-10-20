@@ -33,6 +33,18 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.4"
+      # Defensive only: keeps Python from block-buffering stdout, so a `print()`
+      #    or a crash traceback cannot be swallowed on the way to Render's log
+      #    stream. Standard for a Python service here.
+      #    ⚠️ IT DID NOT FIX THE 2026-10-09 LOG SILENCE, despite being added for
+      #    that. The real cause was `alembic/env.py` calling `fileConfig()`, which
+      #    disabled every existing logger and dropped the root level to WARNING
+      #    when migrations ran at startup. Fixed in the code; see the comment
+      #    there and `backend/tests/test_logging_survives_startup.py`. Buffering
+      #    was never involved — logging writes to stderr, which Python does not
+      #    block-buffer. Do not reach for this env var the next time logs vanish.
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: ENV
         value: staging
       # The deployed web app's origin(s), comma-separated. "*" works for a first
@@ -112,6 +124,8 @@ services:
   #   envVars:
   #     - key: PYTHON_VERSION
   #       value: "3.12.4"
+  #     - key: PYTHONUNBUFFERED      # see the note on the staging service above
+  #       value: "1"
   #     - key: ENV
   #       value: production
   #     - key: ALLOWED_ORIGINS
