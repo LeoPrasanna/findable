@@ -21,6 +21,7 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { retryShareKeyIfNeeded } from '../services/shareKey';
 import { drainShareReceipts } from '../services/shareReceipts';
 import * as Notifications from 'expo-notifications';
+import { reelRoute } from '../services/notifyLog';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { WelcomeBack } from '../components/WelcomeBack';
 import { onUi, emitUi, useDismissOnBackground } from '../services/uiBus';
@@ -315,18 +316,24 @@ function Gate() {
    * `getLastNotificationResponseAsync`. Handling one and not the other means the
    * reminder works when you did not need it and does nothing when you did.
    *
-   * ⚠️ `data.route` IS OUR OWN STRING, not user input — it is written by
-   * services/reminders.ts. It is still checked against a known list rather than
-   * pushed blind, because a notification payload is the kind of thing that
-   * arrives from outside the app's own memory.
+   * ⚠️ NEITHER FIELD IS PUSHED BLIND. `data.route` is our own string, written
+   * by services/reminders.ts, and is checked against a known list.
+   * `data.reelId` cannot be a list - it is a uuid per save - so `reelRoute`
+   * checks its SHAPE instead and builds the path itself. A notification payload
+   * is the kind of thing that arrives from outside the app's own memory, so
+   * neither one gets to decide a pathname.
    */
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const ROUTES: Record<string, string> = { '/todos': '/todos' };
     const open = (response: Notifications.NotificationResponse | null) => {
-      const route = response?.notification?.request?.content?.data?.route;
+      const data = response?.notification?.request?.content?.data;
+      const route = data?.route;
       const target = typeof route === 'string' ? ROUTES[route] : undefined;
+      // A saved-reel banner opens the reel; see services/shareSave.ts.
+      const reel = reelRoute(typeof data?.reelId === 'string' ? data.reelId : undefined);
       if (target) router.push(target as any);
+      else if (reel) router.push(reel as any);
     };
     // Cold start: the tap that opened the app.
     Notifications.getLastNotificationResponseAsync().then(open).catch(() => {});

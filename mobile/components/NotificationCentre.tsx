@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Body, Index, Label, Rule, TextAction } from './kit';
-import { ago, markRead, markAllRead, removeNote, unreadCount, type Note } from '../services/notifyLog';
+import { ago, markRead, markAllRead, reelRoute, removeNote, unreadCount, type Note } from '../services/notifyLog';
 import { deleteNote, loadNotes, markAllNotesRead, markNoteRead } from '../services/notifyStore';
 import { colors, font, spacing, themed } from '../constants/theme';
 
@@ -21,7 +21,18 @@ import { colors, font, spacing, themed } from '../constants/theme';
  * with. The writes are fire-and-forget: a failed one costs a read mark, and
  * blocking the UI on AsyncStorage for that would be a worse trade.
  */
-export function NotificationCentre({ visible }: { visible: boolean }) {
+export function NotificationCentre({
+  visible,
+  onOpen,
+}: {
+  visible: boolean;
+  /**
+   * Navigate away from the panel. Supplied by ProfilePanel's own `go`, which
+   * closes the panel FIRST - pushing underneath an open panel leaves the user
+   * looking at the panel they just tapped out of.
+   */
+  onOpen?: (path: string) => void;
+}) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -35,10 +46,26 @@ export function NotificationCentre({ visible }: { visible: boolean }) {
 
   const unread = unreadCount(notes);
 
+  /**
+   * A row opens the reel it is about, and marks itself read either way.
+   *
+   * ⚠️ MARK READ BEFORE NAVIGATING, and do not return early on an
+   * already-read row. The old version bailed out when `n.read` was set, which
+   * was correct while reading was the only thing a tap did - but a receipt the
+   * user has already glanced at is exactly the one they come back to tap, and
+   * it would have been the only dead row in the list.
+   *
+   * Rows with no openable reel keep the old behaviour. That is most of them
+   * today: failures carry no id, and both native share paths cannot write one
+   * until the next build.
+   */
   const onRowPress = (n: Note) => {
-    if (n.read) return;
-    setNotes(list => markRead(list, n.id));
-    markNoteRead(n.id);
+    if (!n.read) {
+      setNotes(list => markRead(list, n.id));
+      markNoteRead(n.id);
+    }
+    const route = reelRoute(n.reelId);
+    if (route) onOpen?.(route);
   };
 
   const onDelete = (n: Note) => {

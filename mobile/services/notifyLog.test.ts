@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
-import {
-  addNote, markRead, markAllRead, removeNote, unreadCount, parseNotes, ago,
-  orderReceipts, MAX_NOTES, type Note,
-} from './notifyLog.ts';
+import { addNote, markRead, markAllRead, removeNote, unreadCount, parseNotes, ago, orderReceipts, MAX_NOTES, type Note, reelRoute } from './notifyLog.ts';
 
 /**
  * Run with:  npm run test:notifications
@@ -122,5 +119,44 @@ const partial = orderReceipts([{ title: 'Saving from the web' }]);
 assert.equal(partial.length, 1);
 assert.equal(partial[0].body, '');
 assert.equal(partial[0].at, 0);
+
+// ── reelRoute: which receipts are openable ──────────────────────────────────
+// A uuid4 id is the ONLY thing that opens a reel. Everything else must leave
+// the row inert rather than navigate to a dead screen.
+const UUID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+assert.equal(reelRoute(UUID), `/reel/${UUID}`);
+assert.equal(reelRoute(UUID.toUpperCase()), `/reel/${UUID.toUpperCase()}`);
+
+// Absent, because failures and both native share paths write no id.
+assert.equal(reelRoute(undefined), null);
+assert.equal(reelRoute(null), null);
+
+// ⚠️ The shapes that would otherwise navigate somewhere dead. The empty
+// string and the literal 'undefined' are what a JSON round-trip through the
+// Android share Activity or the iOS App Group can actually produce.
+assert.equal(reelRoute(''), null);
+assert.equal(reelRoute('undefined'), null);
+assert.equal(reelRoute('null'), null);
+
+// Not a uuid4: wrong version nibble, wrong variant, truncated, padded.
+assert.equal(reelRoute('3f2504e0-4f89-11d3-9a0c-0305e82c3301'), null);
+assert.equal(reelRoute('3f2504e0-4f89-41d3-1a0c-0305e82c3301'), null);
+assert.equal(reelRoute('3f2504e0-4f89-41d3-9a0c-0305e82c33'), null);
+assert.equal(reelRoute(`${UUID}0`), null);
+assert.equal(reelRoute(` ${UUID}`), null);
+
+// Non-strings reach this from storage another process wrote.
+assert.equal(reelRoute(42 as any), null);
+assert.equal(reelRoute({} as any), null);
+
+// addNote keeps reelId, and leaves rows that never had one alone.
+const withId = addNote([], { id: 'a', title: 't', body: 'b', at: 1, read: false, reelId: UUID });
+assert.equal(withId[0].reelId, UUID);
+const withoutId = addNote([], { id: 'a', title: 't', body: 'b', at: 1, read: false });
+assert.equal(withoutId[0].reelId, undefined);
+
+// Marking read must not drop the id - the row stays openable afterwards.
+assert.equal(markRead(withId, 'a')[0].reelId, UUID);
+assert.equal(markAllRead(withId)[0].reelId, UUID);
 
 console.log('notifyLog: all assertions passed');
