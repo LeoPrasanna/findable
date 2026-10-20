@@ -138,7 +138,7 @@ async function pop(platform: string) {
 /** One id, so a second share replaces the first pop instead of stacking. */
 const SHARE_POP_ID = 'findable-share-pop';
 
-async function notify(title: string, body: string) {
+async function notify(title: string, body: string, reelId?: string) {
   /**
    * ⚠️ RECORDED BEFORE THE PERMISSION CHECK, AND BEFORE THE POST.
    *
@@ -149,11 +149,17 @@ async function notify(title: string, body: string) {
    * saved (or that one failed). Gating the record on the same permission would
    * hide the receipt from exactly the people who have nothing else.
    */
-  await recordNote(title, body);
+  await recordNote(title, body, undefined, reelId);
   if (!(await canNotify())) return;
   try {
     await Notifications.scheduleNotificationAsync({
-      content: { title, body },
+      /**
+       * ⚠️ `data.reelId` is what makes the BANNER openable, and it is a
+       * separate channel from the drawer row above - the shade and the drawer
+       * are read by different code and a user may only ever see one of them.
+       * `_layout.tsx` validates the shape before navigating; see `reelRoute`.
+       */
+      content: { title, body, ...(reelId ? { data: { reelId } } : {}) },
       trigger: null,   // immediately
     });
   } catch {
@@ -248,7 +254,7 @@ export async function saveSharedLink(url: string): Promise<boolean> {
       title = usableTitle((await api.getReel(reel.id).catch(() => null))?.title);
     }
     const ok = savedNotice(where, title);
-    await notify(ok.title, ok.body);
+    await notify(ok.title, ok.body, reel.id);
     return true;
   } catch (e: any) {
     // Say what happened. A silent failure here is the worst outcome of all:

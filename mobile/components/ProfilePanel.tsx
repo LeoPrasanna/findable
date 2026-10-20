@@ -456,7 +456,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                 Sits under the budget meter because both answer "what has this
                 app done lately?", and above Explore because it is a receipt,
                 not a destination. ── */}
-            <NotificationCentre visible={visible} />
+            <NotificationCentre visible={visible} onOpen={go} />
 
             {/* ── Explore ── */}
             <Label wide style={styles.section}>Explore</Label>

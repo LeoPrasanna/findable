@@ -21,6 +21,34 @@ export interface Note {
   /** Epoch ms. */
   at: number;
   read: boolean;
+  /**
+   * The reel this receipt is about, when there is one, so tapping the row opens
+   * it. OPTIONAL and must stay optional: rows written by the Android share
+   * Activity and by the iOS Share Extension carry no id yet (both are native
+   * code and cannot ship over the air), and every row already in a user's
+   * storage predates the field.
+   */
+  reelId?: string;
+}
+
+/**
+ * The route a receipt should open, or null if it should only mark itself read.
+ *
+ * ⚠️ THE FORMAT CHECK IS THE POINT. A `reelId` reaches us from storage that
+ * other processes write - the Android share Activity opens the AsyncStorage
+ * SQLite file directly, and the iOS extension writes through an App Group - so
+ * it is not a value this module has held the whole time. The pathname is always
+ * a literal, so a bad id can only 404 rather than navigate somewhere else, but
+ * a row whose id is `undefined`-as-a-string or an empty string would navigate to
+ * a dead screen and look broken. Checking the shape keeps the row inert instead.
+ *
+ * Reel ids are uuid4 (`backend/app/database.py`: `default=lambda: str(uuid.uuid4())`).
+ */
+const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function reelRoute(reelId?: string | null): string | null {
+  if (typeof reelId !== 'string' || !UUID4.test(reelId)) return null;
+  return `/reel/${reelId}`;
 }
 
 /** A receipt drawer, not an inbox — the library is the durable record. */

@@ -992,8 +992,39 @@ graceful-degradation chains — a debug line would cost nothing, but none produc
     string to be exactly `'free'`; an unknown tier (the usage cache starts null) shows
     nothing, because advertising Pro to someone who bought it is a churn mechanic. Use
     `scripts/dev_seed_tiers.py` to see it.
-- [ ] **Deep linking** — `savehere://reel/{id}` so a share-extension save opens the
-  detail screen directly.
+- [~] **Deep linking — the JS half SHIPPED 2026-10-20 (OTA); the native half needs a
+  build.** The item used to read "`savehere://reel/{id}` so a share-extension save opens
+  the detail screen directly", which misplaced the gap: **that URL already worked.**
+  `app/+native-intent.ts` returns every non-share path untouched and `app/reel/[id].tsx`
+  exists, so expo-router has always routed it. Nothing had ever *produced* such a link.
+  - [x] **A saved-reel banner and its drawer row now open the reel.** `services/shareSave.ts`
+    carries `reel.id` into `notify()`, which attaches `data.reelId` to the notification and
+    passes it to `recordNote`. `Note.reelId` is optional on purpose — rows already in a
+    user's storage predate it. Tapping a row in `NotificationCentre` calls ProfilePanel's
+    own `go`, so the panel closes before the push rather than sitting over the reel.
+  - [x] **`reelRoute(id)` in `services/notifyLog.ts` validates the SHAPE, not a list.**
+    A static allowlist cannot hold a per-save uuid, so the pathname is always a literal
+    and only a uuid4 id produces a route. ⚠️ This is not theoretical tidiness: the ids
+    arrive from storage **other processes write** — the Android share Activity opens the
+    AsyncStorage SQLite file directly and the iOS extension writes through an App Group —
+    and a JSON round-trip there can yield the literal string `'undefined'`. Without the
+    check that navigates to `/reel/undefined`, a dead screen that looks like a bug.
+    Sabotage-verified: removing the check fails the self-check with
+    `actual: '/reel/undefined', expected: null`. Covered by the EXISTING
+    `npm run test:notifications`, so neither `package.json` nor `mobile-ci.yml` changed
+    — no fingerprint risk. Both runtimes verified unmoved by `fingerprint:compare`
+    (iOS `a341cf3c…`, Android `7bc09f03…`).
+  - [ ] ⚠️ **THE SILENT SHARE — THE MAIN PATH — STILL DOES NOT OPEN THE REEL, on
+    EITHER platform, and it cannot ship over the air.** Both halves are native:
+    - **Android:** `plugins/android/ShareSave.kt` — `appendNote` writes the drawer row
+      with no reel id (its `"id"` field is a row id, not a reel id), and
+      `buildNotification` sets a `PendingIntent` to the bare launcher activity with no
+      extras. Needs the save response's id threaded into both. **Needs an APK.**
+    - **iOS:** the Share Extension posts its own notification and writes its receipt to
+      the App Group, both without a reel id. **Needs an IPA.**
+    Not a platform asymmetry — both are equally stuck, for the same reason, and the fix
+    rides along with the next build on each rather than forcing one. Until then the
+    openable receipts are the ones from saves made inside the app.
 - [ ] **Archive as a softer alternative to delete-on-completion.**
 - [ ] **Activity grid + streak.** `todos.completed_at` is already recorded, so the data
   exists.
