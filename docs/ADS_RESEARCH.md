@@ -272,3 +272,45 @@ The three above still hold (live in store, ≥2,000 MAU or ~10,000 impressions/m
 geo data in hand). Add: **the house-ad slot has run and tolerance looked acceptable.**
 Fitting an ad network into a slot nobody minds is a different project from discovering
 mid-integration that the slot itself was the problem.
+
+---
+
+# Addendum 2026-10-20 — five traps salvaged from the closed implementation plan
+
+PR #28 (opened 2026-07-30) carried a 238-line `docs/ADS.md`: a full AdMob
+**rewarded-video** implementation plan. It was closed rather than merged, because
+its whole shape is superseded — the 2026-10-06 direction above is NON-TRACKING,
+Pinterest-style, in-feed, and a rewarded-video plan is a different product. Its
+legal and QA findings outlive that change, so they are here instead of in a
+238-line document that would contradict the direction it sits next to.
+
+**1. The live privacy policy goes false the day any ad ships.** `site/privacy.html`
+is published and linked from the app (`pro.tsx`, `support.tsx`). Five statements in
+it must be rewritten in the SAME release as any ad SDK, not before and not after:
+the "short version" card; "We do not sell your data or share it for advertising";
+§2's "No advertising identifiers… no App Tracking Transparency"; and §4's "we have
+no advertising partners". Then **add** an Advertising section naming what the
+network receives. Publishing the rewrite early is equally wrong — it makes the
+policy false in the other direction.
+
+**2. Consent BEFORE initialization, and the order is the whole thing.**
+`requestInfoUpdate()` → `loadAndShowConsentFormIfRequired()` → *only then*
+`initialize()`. Initializing first is the mistake that leaves a CMP integration
+non-compliant while looking like it works. Required for EEA/UK traffic by Google's
+EU user consent policy **regardless of personalization** — so "non-tracking" does
+not exempt us.
+
+**3. Never QA against live ad units.** Test unit IDs in dev and TestFlight,
+switched by build profile. Completing your own live ads is invalid traffic, and
+AdMob **terminates accounts with earnings forfeited** rather than warning.
+
+**4. If rewarded ever happens: grant on the signed server callback only.** A
+client-called `POST /api/ads/watched` is forgeable with a proxy — anyone unlocks
+every Pro feature forever. Grant on Google's SSV callback, never on the client's
+`onAdDismissed`.
+
+**5. No-fill is not an edge case, and never guess the tier.** Rewarded fill in
+India is materially worse than US fill, so "ads unavailable right now" is a state
+the UI must have. And while the tier is still loading, the button shows a disabled
+neutral label — guessing free-vs-Pro on a monetization surface is how you either
+nag a paying user or give away the paid path.
